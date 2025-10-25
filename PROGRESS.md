@@ -31,4 +31,7 @@
 ## Created MongoDB Indexes
 - Indexes set up in CLI: tags (multikey), source_id (unique), host.
 
-Next steps: Test integration with sample data and finalize documentation.
+## Documentation
+- Created detailed README.md with setup, usage, examples, and extension guide.
+
+Next steps: Test integration with sample data.

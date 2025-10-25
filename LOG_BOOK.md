@@ -14,3 +14,6 @@ Created FastAPI endpoints for tag aggregation, record filtering by tags, and ind
 
 ## Web UI Frontend | 2025-10-25
 Built vanilla JavaScript interface with two-column layout for tag-based filtering and expandable record views.
+
+## Documentation | 2025-10-25
+Created comprehensive README.md with setup instructions, usage examples, data ingestion guide, and extension documentation.
