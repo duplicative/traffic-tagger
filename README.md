@@ -40,7 +40,7 @@ A powerful toolkit for security analysts and developers to analyze captured HTTP
    This will start:
    - MongoDB database (port 27017)
    - FastAPI backend (port 8000)
-   - Nginx frontend (port 80)
+   - Nginx frontend (port 9999)
 
 4. **Verify services are running:**
    ```bash
@@ -74,7 +74,7 @@ A powerful toolkit for security analysts and developers to analyze captured HTTP
 
 ### Accessing the Web UI
 
-1. Open your browser to `http://localhost` (or `http://localhost:80`)
+1. Open your browser to `http://localhost:9999`
 2. Tags will appear in the left sidebar with record counts
 3. Click tags to filter records
 4. Click a record to expand and view full request/response details
