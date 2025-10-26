@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HTTP Traffic Tagger</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>HTTP Traffic Tagger</h1>
+            <p>Analyze and explore tagged HTTP traffic</p>
+        </header>
+        
+        <div class="main-content">
+            <!-- Left Column: Tag Filters -->
+            <aside class="sidebar">
+                <h2>Filter by Tags</h2>
+                <div id="tags-container">
+                    <p class="loading">Loading tags...</p>
+                </div>
+                <div class="filter-actions">
+                    <button id="clear-filters" class="btn-secondary">Clear All</button>
+                </div>
+            </aside>
+            
+            <!-- Right Column: Records List -->
+            <main class="content">
+                <div class="content-header">
+                    <h2>Records</h2>
+                    <div id="selected-tags" class="selected-tags"></div>
+                </div>
+                
+                <div id="records-container">
+                    <p class="info">Select tags to filter records</p>
+                </div>
+            </main>
+        </div>
+    </div>
+    
+    <script src="app.js"></script>
+</body>
+</html>
