@@ -1,0 +1,30 @@
+rules:
+  - name: "Interesting Content-Type"
+    enabled: true
+    conditions:
+      - target: "response.headers.content-type"
+        operator: "contains"
+        value: "javascript"
+      - target: "response.headers.content-type"
+        operator: "contains"
+        value: "html"
+    match_logic: "OR"
+
+  - name: "GraphQL Mutation"
+    enabled: true
+    conditions:
+      - target: "request.path"
+        operator: "contains"
+        value: "graphql"
+      - target: "request.body"
+        operator: "contains"
+        value: "mutation"
+    match_logic: "AND"
+
+  - name: "Potential PII Leak"
+    enabled: true
+    conditions:
+      - target: "response.body"
+        operator: "matches_regex"
+        value: '(?i)("?email"?\s*:\s*".+@.+\..+")' # Regex to find email patterns
+    match_logic: "AND"
