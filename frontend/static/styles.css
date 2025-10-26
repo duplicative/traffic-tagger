@@ -1,3 +1,59 @@
 body {
     font-family: sans-serif;
 }
+
+.container {
+    display: flex;
+}
+
+.sidebar {
+    width: 200px;
+    padding: 20px;
+    border-right: 1px solid #ccc;
+}
+
+.main-content {
+    padding: 20px;
+    flex-grow: 1;
+}
+
+#tags-list {
+    list-style: none;
+    padding: 0;
+}
+
+#tags-list li {
+    cursor: pointer;
+    padding: 5px;
+}
+
+#tags-list li:hover {
+    background-color: #eee;
+}
+
+#records-list {
+    list-style: none;
+    padding: 0;
+}
+
+.record {
+    border: 1px solid #ccc;
+    padding: 10px;
+    margin-bottom: 10px;
+}
+
+.record-summary {
+    cursor: pointer;
+}
+
+.record-details {
+    display: none;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid #eee;
+}
+
+.record-details pre {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}

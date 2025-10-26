@@ -8,9 +8,6 @@ services:
       - "27017:27017"
     volumes:
       - mongodb_data:/data/db
-    environment:
-      - MONGO_INITDB_ROOT_USERNAME=${MONGO_ROOT_USER}
-      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_ROOT_PASSWORD}
 
   api:
     build:
@@ -20,6 +17,7 @@ services:
       - "8000:8000"
     volumes:
       - ./api:/app
+      - ./data:/app/data
     env_file:
       - ./.env
     depends_on:
