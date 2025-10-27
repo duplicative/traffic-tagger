@@ -10,4 +10,6 @@ COPY shared/ /app/shared/
 
 ENV PYTHONPATH=/app
 
-ENTRYPOINT ["python", "-m", "cli.main"]
+WORKDIR /app/cli
+
+ENTRYPOINT ["python", "-m", "main"]

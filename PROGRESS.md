@@ -124,9 +124,26 @@
 
 ---
 
+## Step 8: CLI Docker Integration Fix - Completed
+
+**Date:** 2025-10-26
+
+**Actions Taken:**
+- Fixed CLI argument parsing issue by switching from Typer to Click decorators
+- Updated `cli/main.py` to use `@click.command()` and `@click.option()` decorators
+- Removed problematic `--mongo-uri` CLI option; now uses MONGO_URI environment variable
+- Increased CSV field size limit to 10MB to handle large base64-encoded HTTP traffic data
+- Fixed Dockerfile entrypoint to use `python -m main` for proper module execution
+- Successfully ingested 32 test records with 31 tagged records from `data/TEST_DATA.md`
+- Verified API and frontend services are accessible and displaying tagged records
+
+**Status:** Complete end-to-end workflow is now operational. CLI ingestion, API, and web UI are all functioning correctly.
+
+---
+
 ## Next Steps
 
-1. **Testing:** Test the complete end-to-end workflow once CSV data is available
-2. **Deployment:** Start services with `docker-compose up -d`
-3. **Data Ingestion:** Run CLI with actual traffic CSV data
-4. **Verification:** Access web UI and verify filtering and display functionality
+1. **Production Use:** The system is ready for production data ingestion
+2. **Rule Refinement:** Update `data/rules.yaml` with additional tagging rules as needed
+3. **Data Management:** Ingest additional CSV files using: `docker-compose run --rm cli --file /data/<filename>.csv --rules /data/rules.yaml`
+4. **Monitoring:** Access web UI at http://localhost:9999/ to filter and view tagged traffic

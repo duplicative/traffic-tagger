@@ -1,15 +1,15 @@
 """CLI for HTTP Traffic Tagger ingestion."""
 import base64
 import csv
+import os
 import sys
 from datetime import datetime
 from typing import Optional
 import typer
+import click
 from pymongo import MongoClient, ASCENDING
 from pymongo.errors import DuplicateKeyError
 from shared.rule_engine import RuleEngine
-
-app = typer.Typer()
 
 
 def decode_base64_field(encoded_str: str) -> tuple[str, bool]:
@@ -30,16 +30,18 @@ def decode_base64_field(encoded_str: str) -> tuple[str, bool]:
         return f"Decoding error: {str(e)}", True
 
 
-@app.command()
-def ingest(
-    file: str = typer.Option(..., help="Path to the CSV file"),
-    rules: str = typer.Option(..., help="Path to the YAML rules file"),
-    mongo_uri: str = typer.Option(..., help="MongoDB connection string")
-):
+@click.command()
+@click.option('--file', required=True, help='Path to the CSV file to ingest.')
+@click.option('--rules', required=True, help='Path to the YAML file with tagging rules.')
+def ingest(file: str, rules: str):
     """
     Ingest HTTP traffic data from CSV into MongoDB with tagging.
     """
     typer.echo(f"Processing records from {file}...")
+    
+    # Get MongoDB URI from environment
+    mongo_uri = os.getenv('MONGO_URI', 'mongodb://localhost:27017/')
+    typer.echo(f"Connecting to MongoDB at {mongo_uri}")
     
     # Initialize MongoDB connection
     try:
@@ -68,6 +70,9 @@ def ingest(
     records_inserted = 0
     records_updated = 0
     records_with_tags = 0
+    
+    # Increase CSV field size limit for large base64 encoded fields
+    csv.field_size_limit(10 * 1024 * 1024)  # 10 MB
     
     try:
         with open(file, 'r', encoding='utf-8') as csvfile:
@@ -159,4 +164,4 @@ def ingest(
 
 
 if __name__ == "__main__":
-    app()
+    ingest()
