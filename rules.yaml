@@ -1,0 +1,271 @@
+rules:
+  # --- Category 1: Authorization & Access Control (RBAC/ABAC Gadgets) ---
+  
+  - name: "Potential IDOR Parameter"
+    enabled: true
+    conditions:
+      # Common identifiers in the path (e.g., /api/user/123, /api/resource/uuid-guid)
+      - target: "request.path"
+        operator: "matches_regex"
+        value: '(?i)(user_?id|account_?id|client_?id|order_?id|uuid|guid|profile)'
+    match_logic: "AND"
+
+  - name: "Role/Admin Endpoint Access"
+    enabled: true
+    conditions:
+      # Endpoints that likely require elevated permissions
+      - target: "request.path"
+        operator: "matches_regex"
+        value: '(?i)(/admin|/management|/control|/sudo|/v1/config|/secrets|/root)'
+    match_logic: "AND"
+
+  - name: "X-Forwarded-For Usage"
+    enabled: true
+    conditions:
+      # Request contains X-Forwarded-For, indicating a proxy layer, potential for IP header abuse.
+      - target: "request.headers.x-forwarded-for"
+        operator: "contains"
+        value: "." # Any value in the header
+    match_logic: "AND"
+
+  - name: "Custom Auth/Role Header"
+    enabled: true
+    conditions:
+      # Requests containing non-standard authorization or role-defining headers
+      - target: "request.headers.x-auth-token"
+        operator: "contains"
+        value: ""
+      - target: "request.headers.x-user-role"
+        operator: "contains"
+        value: ""
+    match_logic: "OR"
+
+  # --- Category 2: Server-Side Request/File Operations (SSRF/LFI/RCE Gadgets) ---
+
+  - name: "Local File Inclusion Keyword"
+    enabled: true
+    conditions:
+      # Look for classic LFI/Path traversal attempts in path or body
+      - target: "request.path"
+        operator: "contains"
+        value: "../"
+      - target: "request.path"
+        operator: "contains"
+        value: "file="
+      - target: "request.body"
+        operator: "contains"
+        value: "/etc/passwd"
+    match_logic: "OR"
+
+  - name: "URL-as-Parameter (Potential SSRF/Open Redirect)"
+    enabled: true
+    conditions:
+      # Parameters often used for external URL fetching or redirecting
+      - target: "request.path"
+        operator: "matches_regex"
+        value: '(?i)(url=|uri=|link=|proxy=|callback=)'
+      - target: "request.body"
+        operator: "matches_regex"
+        value: '(?i)(url=|uri=|link=|proxy=|callback=)'
+    match_logic: "OR"
+    
+  - name: "Java Deserialization Gadget (X-Powered-By Header)"
+    enabled: true
+    conditions:
+      # Java technology stack suggests vulnerability to insecure deserialization (e.g., Springboot, JBoss, WebLogic)
+      - target: "response.headers.x-powered-by"
+        operator: "contains"
+        value: "java"
+      - target: "response.headers.server"
+        operator: "contains"
+        value: "jetty"
+    match_logic: "OR"
+
+  - name: "Developer Debug/Test Header"
+    enabled: true
+    conditions:
+      # Requests that carry headers indicating a testing or debug environment
+      - target: "request.headers.x-debug"
+        operator: "contains"
+        value: "true"
+      - target: "request.headers.x-testing-mode"
+        operator: "contains"
+        value: ""
+      - target: "request.headers.x-override-user"
+        operator: "contains"
+        value: "admin"
+    match_logic: "OR"
+
+  # --- Category 3: Command Execution / Injection Gadgets ---
+
+  - name: "OS Command Injection Keywords"
+    enabled: true
+    conditions:
+      # Look for shell command meta-characters often used for injection
+      - target: "request.body"
+        operator: "matches_regex"
+        value: '(&|;|\`|\$|\|\|)'
+      - target: "request.path"
+        operator: "matches_regex"
+        value: '(\&|;|\`|\$|\|\|)'
+    match_logic: "OR"
+
+  - name: "Potential SQLi in Path"
+    enabled: true
+    conditions:
+      # Basic SQL syntax often used in a vulnerable parameter
+      - target: "request.path"
+        operator: "contains"
+        value: "select"
+      - target: "request.path"
+        operator: "contains"
+        value: "union"
+      - target: "request.path"
+        operator: "contains"
+        value: "and 1=1"
+    match_logic: "OR"
+
+  - name: "Potential NoSQLi in Body"
+    enabled: true
+    conditions:
+      # MongoDB-specific operators for injection
+      - target: "request.body"
+        operator: "contains"
+        value: "$where"
+      - target: "request.body"
+        operator: "contains"
+        value: "$regex"
+    match_logic: "OR"
+    
+  - name: "XML/XXE Content Type"
+    enabled: true
+    conditions:
+      # Endpoints accepting XML which is often vulnerable to XXE
+      - target: "request.headers.content-type"
+        operator: "contains"
+        value: "application/xml"
+      - target: "request.headers.content-type"
+        operator: "contains"
+        value: "text/xml"
+    match_logic: "OR"
+
+  # --- Category 4: Information Disclosure & Error Handling ---
+
+  - name: "Unusual Server Error Status Code (Not 401/403/404)"
+    enabled: true
+    conditions:
+      # Non-standard 5xx/4xx codes that may suggest custom or detailed error pages
+      - target: "response.status_code"
+        operator: "equals"
+        value: "501"
+      - target: "response.status_code"
+        operator: "equals"
+        value: "503"
+      - target: "response.status_code"
+        operator: "equals"
+        value: "418"
+      - target: "response.status_code"
+        operator: "equals"
+        value: "400"
+    match_logic: "OR"
+
+  - name: "Internal System Information in Response"
+    enabled: true
+    conditions:
+      # Response body contains common error or system phrases
+      - target: "response.body"
+        operator: "matches_regex"
+        value: '(?i)(stack trace|exception|connection string|java\.lang|php\.ini|mysql_fetch_array)'
+    match_logic: "AND"
+
+  - name: "Password/Secret Disclosure"
+    enabled: true
+    conditions:
+      # Body disclosure of common secret names/keywords
+      - target: "response.body"
+        operator: "matches_regex"
+        value: '(?i)(password|secret_key|api_token|private_key|aws_access_key)'
+    match_logic: "AND"
+    
+  - name: "Development Artifact in Path"
+    enabled: true
+    conditions:
+      # Requests to development/backup/version control artifacts
+      - target: "request.path"
+        operator: "matches_regex"
+        value: '(?i)(.bak|.old|.tgz|temp|backup|readme|.git/HEAD)'
+    match_logic: "OR"
+
+  # --- Category 5: Client-Side Gadgets ---
+
+  - name: "Potential Open Redirect Parameter"
+    enabled: true
+    conditions:
+      # Parameters typically used to control post-login or general redirects
+      - target: "request.path"
+        operator: "matches_regex"
+        value: '(?i)(next|redirect_to|continue|returnUrl)'
+    match_logic: "AND"
+
+  - name: "Liberal CORS Policy Detected"
+    enabled: true
+    conditions:
+      # Indicates an endpoint allows credentials and an overly permissive origin policy
+      - target: "response.headers.access-control-allow-origin"
+        operator: "contains"
+        value: "*"
+      - target: "response.headers.access-control-allow-credentials"
+        operator: "equals"
+        value: "true"
+    match_logic: "AND"
+    
+  - name: "High-Value POST Request (CSRF/Injection Target)"
+    enabled: true
+    conditions:
+      # Identify POST/PUT requests that might not have anti-CSRF measures
+      - target: "request.method"
+        operator: "equals"
+        value: "POST"
+      - target: "request.headers.content-type"
+        operator: "not_contains"
+        value: "application/json" # Target form-data, plain text which are common for simpler CSRF
+    match_logic: "AND"
+
+  - name: "Potential Host Header Injection"
+    enabled: true
+    conditions:
+      # When the Host header is included in the response body, it might be vulnerable to injection
+      - target: "response.body"
+        operator: "contains"
+        value: "request.headers.host" # Generic check that may match if Host is reflected
+    match_logic: "AND"
+
+  - name: "Interesting Content-Type"
+    enabled: true
+    conditions:
+      - target: "response.headers.content-type"
+        operator: "contains"
+        value: "javascript"
+      - target: "response.headers.content-type"
+        operator: "contains"
+        value: "html"
+    match_logic: "OR"
+
+  - name: "GraphQL Mutation"
+    enabled: true
+    conditions:
+      - target: "request.path"
+        operator: "contains"
+        value: "graphql"
+      - target: "request.body"
+        operator: "contains"
+        value: "mutation"
+    match_logic: "AND"
+
+  - name: "Potential PII Leak"
+    enabled: true
+    conditions:
+      - target: "response.body"
+        operator: "matches_regex"
+        value: '(?i)("?email"?\s*:\s*".+@.+\..+")' # Regex to find email patterns
+    match_logic: "AND"

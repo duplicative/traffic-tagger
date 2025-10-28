@@ -22,7 +22,7 @@ echo "Starting services..."
 echo ""
 
 # Start services
-docker-compose up -d
+docker compose run --rm cli --file /data/TEST_DATA.csv --rules /data/rules.yaml && docker compose up
 
 echo ""
 echo "Waiting for services to be ready..."
