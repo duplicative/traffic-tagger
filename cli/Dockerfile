@@ -12,4 +12,5 @@ ENV PYTHONPATH=/app
 
 WORKDIR /app/cli
 
-ENTRYPOINT ["python", "-m", "main"]
+ENTRYPOINT ["python", "main.py"]
+CMD []

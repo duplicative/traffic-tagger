@@ -55,10 +55,7 @@ A powerful toolkit for security analysts and developers to analyze captured HTTP
 
 2. **Run the ingestion CLI:**
    ```bash
-   docker-compose run --rm cli ingest \
-     --file /data/your_traffic.csv \
-     --rules /data/rules.yaml \
-     --mongo-uri "mongodb://admin:password123@database:27017/"
+   docker-compose run --rm cli ingest --file /data/your_traffic.csv --rules /data/rules.yaml --mongo-uri "mongodb://admin:password123@database:27017/"
    ```
 
 3. **Monitor progress:**
