@@ -56,6 +56,23 @@ services:
     depends_on:
       - database
 
+  watcher:
+    build:
+      context: .
+      dockerfile: watcher/Dockerfile
+    container_name: traffic_tagger_watcher
+    environment:
+      MONGO_URI: ${MONGO_URI}
+      DATA_DIR: /data
+      DEBOUNCE_SECONDS: 5
+    volumes:
+      - ./data:/data
+    networks:
+      - tagger_network
+    depends_on:
+      - database
+    restart: unless-stopped
+
 networks:
   tagger_network:
     driver: bridge

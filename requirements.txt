@@ -5,3 +5,4 @@ pyyaml==6.0.1
 typer==0.9.0
 python-dotenv==1.0.0
 pydantic==2.5.0
+watchdog==3.0.0

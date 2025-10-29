@@ -5,6 +5,7 @@ A powerful toolkit for security analysts and developers to analyze captured HTTP
 ## Features
 
 - **Rule-Based Tagging Engine**: Define custom rules in YAML to automatically tag interesting HTTP traffic
+- **Hot Reload**: Automatic detection and processing of rule changes and new data files
 - **MongoDB Storage**: Centralized storage for all processed traffic data
 - **Web Interface**: Simple, intuitive UI for filtering and exploring tagged records
 - **Docker Compose**: Complete containerized stack for easy deployment
@@ -41,6 +42,7 @@ A powerful toolkit for security analysts and developers to analyze captured HTTP
    - MongoDB database (port 27017)
    - FastAPI backend (port 8000)
    - Nginx frontend (port 9999)
+   - Watcher service (hot reload)
 
 4. **Verify services are running:**
    ```bash
@@ -49,25 +51,43 @@ A powerful toolkit for security analysts and developers to analyze captured HTTP
 
 ### Ingesting Data
 
-1. **Prepare your data:**
-   - Place your CSV file in the `data/` directory
-   - Create or copy a rules file (see `data/rules.example.yaml`)
+#### Option 1: Automatic Ingestion (Recommended)
 
-2. **Run the ingestion CLI:**
-   ```bash
-   docker-compose run --rm cli ingest --file /data/your_traffic.csv --rules /data/rules.yaml --mongo-uri "mongodb://admin:password123@database:27017/"
-   ```
+With the watcher service running, simply drop CSV files into the `data/` directory:
 
-3. **Monitor progress:**
-   The CLI will display a progress summary:
-   ```
-   Processing records from /data/your_traffic.csv...
-   
-   Ingestion Complete.
-   - Records Processed: 1500
-   - Records Inserted/Updated: 1500
-   - Records with Tags: 327
-   ```
+```bash
+cp your_traffic.csv data/
+```
+
+The watcher will automatically:
+- Detect the new CSV file within 5 seconds
+- Load the current rules from `data/rules.yaml`
+- Process and tag all records
+- Store them in MongoDB
+- Track the file to prevent duplicate processing
+
+Monitor the watcher logs:
+```bash
+docker compose logs -f watcher
+```
+
+#### Option 2: Manual Ingestion
+
+For one-time or manual ingestion:
+
+```bash
+docker compose run --rm cli --file /data/your_traffic.csv --rules /data/rules.yaml
+```
+
+The CLI will display a progress summary:
+```
+Processing records from /data/your_traffic.csv...
+
+Ingestion Complete.
+- Records Processed: 1500
+- Records Inserted/Updated: 1500
+- Records with Tags: 327
+```
 
 ### Accessing the Web UI
 
@@ -88,6 +108,10 @@ traffic_tagger/
 │   ├── Dockerfile
 │   ├── main.py            # CLI commands
 │   └── __init__.py
+├── watcher/                # Hot reload service
+│   ├── Dockerfile
+│   ├── main.py            # File system watcher
+│   └── __init__.py
 ├── shared/                 # Shared modules
 │   ├── http_parser.py     # HTTP request/response parser
 │   ├── rule_engine.py     # Tagging rule engine
@@ -99,8 +123,9 @@ traffic_tagger/
 │       ├── index.html     # Main HTML page
 │       ├── styles.css     # CSS styles
 │       └── app.js         # JavaScript application
-├── data/                   # Data directory (mounted in CLI container)
-│   └── rules.example.yaml # Example rules file
+├── data/                   # Data directory (watched for changes)
+│   ├── rules.yaml         # Active rules file
+│   └── *.csv              # CSV data files
 ├── docker-compose.yml      # Docker Compose configuration
 ├── requirements.txt        # Python dependencies
 ├── .env.example            # Example environment variables
@@ -129,6 +154,97 @@ The ingestion tool expects a CSV file with the following columns:
 - `response_created_at`: Response creation timestamp
 - `raw`: **Base64-encoded raw HTTP request**
 - `response_raw`: **Base64-encoded raw HTTP response**
+
+## Hot Reload
+
+The watcher service provides automatic hot reload functionality for both rules and data files.
+
+### Rules Hot Reload
+
+When you modify `data/rules.yaml`, the watcher will:
+1. Detect the change within 5 seconds (debounce period)
+2. Reload the rules from the file
+3. Re-tag **all existing records** in MongoDB with the updated rules
+4. Log the operation with statistics
+
+Example:
+```bash
+# Edit your rules
+vim data/rules.yaml
+
+# Watch it automatically reload
+docker compose logs -f watcher
+```
+
+Output:
+```
+============================================================
+RULES RELOAD INITIATED
+============================================================
+Loading rules from: /data/rules.yaml
+Loaded 13 rules
+Re-tagging 32 existing records...
+============================================================
+RULES RELOAD COMPLETE
+- Records Updated: 32
+- Records with Tags: 30
+============================================================
+```
+
+### CSV Auto-Ingestion
+
+When you add a new CSV file to the `data/` directory, the watcher will:
+1. Detect the new file within 5 seconds
+2. Load the current rules
+3. Process all records from the CSV
+4. Tag them with the current rules
+5. Store them in MongoDB
+6. Track the filename to prevent duplicate processing
+
+Example:
+```bash
+# Copy new data file
+cp captured_traffic.csv data/
+
+# Watch it automatically process
+docker compose logs -f watcher
+```
+
+Output:
+```
+============================================================
+CSV INGESTION INITIATED: captured_traffic.csv
+============================================================
+Loaded 13 rules
+Progress: 100 records processed...
+Progress: 200 records processed...
+============================================================
+CSV INGESTION COMPLETE
+- File: captured_traffic.csv
+- Records Processed: 250
+- Records Inserted/Updated: 250
+- Records with Tags: 180
+============================================================
+```
+
+### Configuration
+
+The watcher service can be configured via environment variables in `docker-compose.yml`:
+
+- `DATA_DIR`: Directory to watch (default: `/data`)
+- `MONGO_URI`: MongoDB connection string
+- `DEBOUNCE_SECONDS`: Seconds to wait after last change before processing (default: `5`)
+
+### Duplicate Prevention
+
+The watcher tracks processed CSV files in MongoDB metadata. If you add a CSV file that was already processed:
+- It will be skipped automatically
+- No duplicate records will be created
+- A log message will indicate the file was already processed
+
+To reset and reprocess a file:
+1. Remove it from the tracked list in MongoDB (`watcher_metadata` collection)
+2. Or rename the file before adding it again
 
 ## Rule Engine
 

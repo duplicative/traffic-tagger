@@ -141,9 +141,46 @@
 
 ---
 
+## Step 9: Hot Reload Watcher Service - Completed
+
+**Date:** 2025-10-28
+
+**Actions Taken:**
+- Created `watcher/` service directory with dedicated hot reload functionality
+- Implemented `watcher/main.py` with file system monitoring using `watchdog` library
+- Added debouncing mechanism (5-second delay) to batch rapid changes
+- Implemented rules hot reload:
+  - Detects changes to `data/rules.yaml`
+  - Automatically reloads rules and re-tags all existing records in MongoDB
+  - Logs operation with detailed statistics
+- Implemented CSV auto-ingestion:
+  - Detects new CSV files added to `data/` directory
+  - Automatically processes and tags all records
+  - Tracks processed files in MongoDB metadata to prevent duplicates
+  - Supports idempotent upsert operations based on source_id
+- Created watcher Dockerfile with all dependencies
+- Added `watchdog==3.0.0` to requirements.txt
+- Added watcher service to docker-compose.yml with:
+  - Automatic restart policy (`unless-stopped`)
+  - Data directory volume mount
+  - Environment configuration
+  - MongoDB dependency
+- Tested both hot reload features:
+  - Rules modification successfully re-tagged 32 existing records
+  - New CSV file auto-ingestion processed 2 test records
+  - Duplicate prevention verified (file not reprocessed on touch)
+- Updated README.md with comprehensive hot reload documentation
+- Added dedicated Hot Reload section with usage examples and configuration options
+
+**Status:** Hot reload functionality is fully operational. System now supports automatic rules reload and CSV auto-ingestion without manual CLI invocation.
+
+---
+
 ## Next Steps
 
-1. **Production Use:** The system is ready for production data ingestion
-2. **Rule Refinement:** Update `data/rules.yaml` with additional tagging rules as needed
-3. **Data Management:** Ingest additional CSV files using: `docker-compose run --rm cli --file /data/<filename>.csv --rules /data/rules.yaml`
-4. **Monitoring:** Access web UI at http://localhost:9999/ to filter and view tagged traffic
+1. **Production Use:** The system is ready for production data ingestion with hot reload
+2. **Rule Refinement:** Simply edit `data/rules.yaml` - changes will be automatically applied to all records
+3. **Data Management:** Drop CSV files into `data/` directory for automatic processing
+4. **Monitoring:** 
+   - Access web UI at http://localhost:9999/ to filter and view tagged traffic
+   - Monitor watcher activity: `docker compose logs -f watcher`
