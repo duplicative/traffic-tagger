@@ -199,17 +199,19 @@ class DataWatcherHandler(FileSystemEventHandler):
                     try:
                         # Re-apply rules
                         tags = []
+                        highlights = {}
                         if not record.get('request_decoding_error') and not record.get('response_decoding_error'):
                             decoded_request = record.get('decoded_request', '')
                             decoded_response = record.get('decoded_response', '')
-                            tags = rule_engine.apply_rules(decoded_request, decoded_response)
+                            tags, highlights = rule_engine.apply_rules(decoded_request, decoded_response)
                         
-                        # Update record with new tags
+                        # Update record with new tags and highlights
                         self.collection.update_one(
                             {'_id': record['_id']},
                             {
                                 '$set': {
                                     'tags': tags,
+                                    'highlights': highlights,
                                     'tags_updated_at': datetime.utcnow().isoformat()
                                 }
                             }
@@ -271,9 +273,10 @@ class DataWatcherHandler(FileSystemEventHandler):
                     
                     # Apply tagging rules
                     tags = []
+                    highlights = {}
                     if not request_error and not response_error:
                         try:
-                            tags = rule_engine.apply_rules(decoded_request, decoded_response)
+                            tags, highlights = rule_engine.apply_rules(decoded_request, decoded_response)
                         except Exception as e:
                             logger.warning(f"Error applying rules to record {row.get('id')}: {e}")
                     
@@ -300,6 +303,7 @@ class DataWatcherHandler(FileSystemEventHandler):
                         'decoded_response': decoded_response,
                         'response_decoding_error': response_error,
                         'tags': tags,
+                        'highlights': highlights,
                         'processed_at': datetime.utcnow().isoformat(),
                         'source_file': Path(csv_file_path).name
                     }

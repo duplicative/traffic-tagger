@@ -1,6 +1,6 @@
 """FastAPI backend for HTTP Traffic Tagger."""
 import os
-from typing import List, Optional
+from typing import List, Optional, Dict
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pymongo import MongoClient
@@ -66,6 +66,7 @@ class RecordDetail(BaseModel):
     decoded_response: str
     response_decoding_error: bool
     tags: List[str]
+    highlights: Dict[str, List[str]] = {}
     processed_at: str
 
 
@@ -193,6 +194,7 @@ async def get_record(record_id: str):
             "decoded_response": doc.get("decoded_response", ""),
             "response_decoding_error": doc.get("response_decoding_error", False),
             "tags": doc.get("tags", []),
+            "highlights": doc.get("highlights", {}),
             "processed_at": doc.get("processed_at", "")
         }
         

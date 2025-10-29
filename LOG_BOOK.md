@@ -20,3 +20,9 @@ Created single-page web application with vanilla JavaScript featuring two-column
 
 ## Comprehensive Documentation | 2025-10-26
 Authored complete README.md with quick start guide, architecture documentation, rule engine specification, API reference, troubleshooting guide, and example rules file for common use cases.
+
+## Hot Reload Watcher Service | 2025-10-28
+Implemented file system watcher service using watchdog library that automatically detects changes to rules.yaml (re-tags all records) and new CSV files (auto-ingests data), with debouncing, duplicate prevention, and comprehensive logging for zero-touch workflow.
+
+## Highlight Matched Rule Values Feature | 2025-10-29
+Enhanced rule engine to return matched string values, updated data pipeline (CLI, watcher, API) to store and expose highlights, implemented frontend JavaScript highlighting function with regex-based text wrapping, and added yellow highlight CSS styling for instant visual identification of rule-matched text in HTTP traffic.

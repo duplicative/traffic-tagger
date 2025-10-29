@@ -1,7 +1,7 @@
 """Rule-based tagging engine for HTTP traffic analysis."""
 import re
 import yaml
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Tuple
 from shared.http_parser import HTTPParser
 
 
@@ -20,7 +20,7 @@ class RuleEngine:
         
         self.rules = rules_data.get('rules', [])
 
-    def apply_rules(self, decoded_request: str, decoded_response: str) -> List[str]:
+    def apply_rules(self, decoded_request: str, decoded_response: str) -> Tuple[List[str], Dict[str, List[str]]]:
         """
         Apply all enabled rules to the HTTP request/response pair.
         
@@ -29,9 +29,10 @@ class RuleEngine:
             decoded_response: Decoded HTTP response string
             
         Returns:
-            List of tag names that matched
+            Tuple of (list of tag names that matched, dict of rule name to matched values)
         """
         tags = []
+        highlights = {}
         
         # Parse the HTTP request and response
         request = HTTPParser.parse_request(decoded_request)
@@ -42,12 +43,14 @@ class RuleEngine:
             if not rule.get('enabled', True):
                 continue
             
-            if self._evaluate_rule(rule, request, response):
+            matched_values = self._evaluate_rule(rule, request, response)
+            if matched_values:
                 tags.append(rule['name'])
+                highlights[rule['name']] = matched_values
         
-        return tags
+        return tags, highlights
 
-    def _evaluate_rule(self, rule: Dict[str, Any], request: Dict, response: Dict) -> bool:
+    def _evaluate_rule(self, rule: Dict[str, Any], request: Dict, response: Dict) -> List[str]:
         """
         Evaluate a single rule against the request/response.
         
@@ -57,25 +60,34 @@ class RuleEngine:
             response: Parsed response dictionary
             
         Returns:
-            True if the rule matches, False otherwise
+            List of matched string values if rule matches, empty list otherwise
         """
         conditions = rule.get('conditions', [])
         match_logic = rule.get('match_logic', 'AND').upper()
         
         if not conditions:
-            return False
+            return []
         
-        results = []
+        # Collect all matched values from conditions
+        all_matched_values = []
+        condition_results = []
+        
         for condition in conditions:
-            result = self._evaluate_condition(condition, request, response)
-            results.append(result)
+            matched_values = self._evaluate_condition(condition, request, response)
+            condition_results.append(len(matched_values) > 0)
+            all_matched_values.extend(matched_values)
         
+        # Check if rule matches based on match logic
+        rule_matches = False
         if match_logic == 'OR':
-            return any(results)
+            rule_matches = any(condition_results)
         else:  # Default to AND
-            return all(results)
+            rule_matches = all(condition_results)
+        
+        # Return matched values only if rule matches
+        return all_matched_values if rule_matches else []
 
-    def _evaluate_condition(self, condition: Dict[str, str], request: Dict, response: Dict) -> bool:
+    def _evaluate_condition(self, condition: Dict[str, str], request: Dict, response: Dict) -> List[str]:
         """
         Evaluate a single condition.
         
@@ -85,7 +97,7 @@ class RuleEngine:
             response: Parsed response dictionary
             
         Returns:
-            True if the condition matches, False otherwise
+            List of matched string values if condition matches, empty list otherwise
         """
         target = condition.get('target', '')
         operator = condition.get('operator', '')
@@ -95,12 +107,12 @@ class RuleEngine:
         target_value = self._extract_target_value(target, request, response)
         
         if target_value is None:
-            return False
+            return []
         
         # Convert to string for comparison
         target_value = str(target_value)
         
-        # Apply the operator
+        # Apply the operator and get matched values
         return self._apply_operator(target_value, operator, value)
 
     def _extract_target_value(self, target: str, request: Dict, response: Dict) -> Any:
@@ -140,7 +152,7 @@ class RuleEngine:
         
         return current
 
-    def _apply_operator(self, target_value: str, operator: str, value: str) -> bool:
+    def _apply_operator(self, target_value: str, operator: str, value: str) -> List[str]:
         """
         Apply the specified operator to compare target_value and value.
         
@@ -150,27 +162,42 @@ class RuleEngine:
             value: The value to compare against
             
         Returns:
-            True if the comparison succeeds, False otherwise
+            List of matched string values if comparison succeeds, empty list otherwise
         """
         if operator == 'contains':
-            return value.lower() in target_value.lower()
+            if value.lower() in target_value.lower():
+                # Find the actual matched substring (case-insensitive match)
+                pattern = re.compile(re.escape(value), re.IGNORECASE)
+                matches = pattern.findall(target_value)
+                return matches if matches else [value]
+            return []
         
         elif operator == 'not_contains':
-            return value.lower() not in target_value.lower()
+            # not_contains doesn't need highlighting as it's a negative condition
+            if value.lower() not in target_value.lower():
+                return [f"(not: {value})"]
+            return []
         
         elif operator == 'equals':
-            return target_value == value
+            if target_value == value:
+                return [target_value]
+            return []
         
         elif operator == 'starts_with':
-            return target_value.startswith(value)
+            if target_value.startswith(value):
+                return [value]
+            return []
         
         elif operator == 'ends_with':
-            return target_value.endswith(value)
+            if target_value.endswith(value):
+                return [value]
+            return []
         
         elif operator == 'matches_regex':
             try:
-                return bool(re.search(value, target_value))
+                matches = re.findall(value, target_value)
+                return matches if matches else []
             except re.error:
-                return False
+                return []
         
-        return False
+        return []

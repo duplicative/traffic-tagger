@@ -192,20 +192,65 @@ async function loadRecordDetails(recordId) {
         
         const record = await response.json();
         
+        // Apply highlights to request and response text
+        const highlightedRequest = applyHighlights(record.decoded_request, record.highlights || {});
+        const highlightedResponse = applyHighlights(record.decoded_response, record.highlights || {});
+        
         detailsDiv.innerHTML = `
             <div class="http-content">
                 <h3>Request</h3>
-                <pre>${escapeHtml(record.decoded_request)}</pre>
+                <pre>${highlightedRequest}</pre>
             </div>
             <div class="http-content">
                 <h3>Response</h3>
-                <pre>${escapeHtml(record.decoded_response)}</pre>
+                <pre>${highlightedResponse}</pre>
             </div>
         `;
     } catch (error) {
         console.error('Error loading record details:', error);
         detailsDiv.innerHTML = '<p class="error">Error loading details. Please try again.</p>';
     }
+}
+
+// Apply highlights to text based on matched values
+function applyHighlights(text, highlights) {
+    if (!text || !highlights || Object.keys(highlights).length === 0) {
+        return escapeHtml(text);
+    }
+    
+    // Escape HTML first
+    let highlightedText = escapeHtml(text);
+    
+    // Collect all unique matched values from all rules
+    const allMatches = new Set();
+    Object.values(highlights).forEach(matches => {
+        matches.forEach(match => {
+            // Skip negative conditions and empty matches
+            if (match && !match.startsWith('(not:')) {
+                allMatches.add(match);
+            }
+        });
+    });
+    
+    // Sort matches by length (descending) to handle longer matches first
+    // This prevents partial matches from breaking longer ones
+    const sortedMatches = Array.from(allMatches).sort((a, b) => b.length - a.length);
+    
+    // Apply highlights to each unique match
+    sortedMatches.forEach(match => {
+        if (match) {
+            // Escape the match for use in regex
+            const escapedMatch = match.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            // Create case-insensitive global regex
+            const regex = new RegExp(escapedMatch, 'gi');
+            // Replace with highlighted version
+            highlightedText = highlightedText.replace(regex, (matched) => {
+                return `<span class="highlight">${matched}</span>`;
+            });
+        }
+    });
+    
+    return highlightedText;
 }
 
 // Get status code class for styling

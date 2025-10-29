@@ -176,11 +176,46 @@
 
 ---
 
+---
+
+## Step 10: Highlight Matched Rule Values Feature - Completed
+
+**Date:** 2025-10-29
+
+**Actions Taken:**
+- Enhanced `shared/rule_engine.py` to return matched string values instead of boolean:
+  - Modified `apply_rules()` to return tuple of (tags, highlights dict)
+  - Updated `_evaluate_rule()` to collect and return matched values
+  - Modified `_evaluate_condition()` to return list of matched strings
+  - Enhanced `_apply_operator()` to extract actual matched substrings for each operator type
+- Updated `cli/main.py` to capture and store highlights dict in MongoDB documents
+- Updated `watcher/main.py` in both `_reload_rules()` and `_ingest_csv_file()` to handle highlights
+- Modified `api/main.py` to expose highlights field via `/api/record/{id}` endpoint:
+  - Added Dict type import
+  - Updated RecordDetail Pydantic model with highlights field
+  - Added highlights to API response
+- Implemented frontend highlighting in `frontend/static/app.js`:
+  - Created `applyHighlights()` function that wraps matched text in `<span class="highlight">` tags
+  - Modified `loadRecordDetails()` to apply highlights to both request and response
+  - Implemented smart matching with case-insensitive regex
+  - Added protection against breaking HTML structure
+- Added CSS styling in `frontend/static/styles.css`:
+  - Created `.highlight` class with yellow background (#ffeb3b)
+  - Ensured text readability with black color and proper contrast
+- Tested end-to-end functionality:
+  - Verified highlights stored in MongoDB with correct structure
+  - Confirmed API returns highlights for tagged records
+  - Validated frontend displays highlighted text correctly
+
+**Status:** Highlight feature is fully operational. Matched rule values are now visually highlighted in yellow in the web UI for immediate analyst focus.
+
+---
+
 ## Next Steps
 
-1. **Production Use:** The system is ready for production data ingestion with hot reload
-2. **Rule Refinement:** Simply edit `data/rules.yaml` - changes will be automatically applied to all records
+1. **Production Use:** The system is ready for production data ingestion with hot reload and visual highlights
+2. **Rule Refinement:** Simply edit `data/rules.yaml` - changes will be automatically applied with updated highlights
 3. **Data Management:** Drop CSV files into `data/` directory for automatic processing
 4. **Monitoring:** 
-   - Access web UI at http://localhost:9999/ to filter and view tagged traffic
+   - Access web UI at http://localhost:9999/ to filter and view tagged traffic with highlights
    - Monitor watcher activity: `docker compose logs -f watcher`

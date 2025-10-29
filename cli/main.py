@@ -87,9 +87,10 @@ def ingest(file: str, rules: str):
                 
                 # Apply tagging rules
                 tags = []
+                highlights = {}
                 if not request_error and not response_error:
                     try:
-                        tags = rule_engine.apply_rules(decoded_request, decoded_response)
+                        tags, highlights = rule_engine.apply_rules(decoded_request, decoded_response)
                     except Exception as e:
                         typer.echo(f"Warning: Error applying rules to record {row.get('id')}: {e}", err=True)
                 
@@ -116,6 +117,7 @@ def ingest(file: str, rules: str):
                     'decoded_response': decoded_response,
                     'response_decoding_error': response_error,
                     'tags': tags,
+                    'highlights': highlights,
                     'processed_at': datetime.utcnow().isoformat()
                 }
                 
