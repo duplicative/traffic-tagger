@@ -26,3 +26,6 @@ Implemented file system watcher service using watchdog library that automaticall
 
 ## Highlight Matched Rule Values Feature | 2025-10-29
 Enhanced rule engine to return matched string values, updated data pipeline (CLI, watcher, API) to store and expose highlights, implemented frontend JavaScript highlighting function with regex-based text wrapping, and added yellow highlight CSS styling for instant visual identification of rule-matched text in HTTP traffic.
+
+## Color-Coded Tag Highlighting | 2025-10-30
+Implemented comprehensive color-coding system that assigns unique colors from a 20-color palette to each tag, with consistent color application across tag sidebar selections, filter pills, record tag badges, and matched text highlights in HTTP content, enabling instant visual correlation between tags and their corresponding matched values in traffic analysis.

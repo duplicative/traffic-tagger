@@ -7,7 +7,8 @@ const state = {
     tags: [],
     selectedTags: new Set(),
     records: [],
-    expandedRecords: new Set()
+    expandedRecords: new Set(),
+    tagColors: {} // Map of tag name to color
 };
 
 // Initialize the application
@@ -21,6 +22,39 @@ function setupEventListeners() {
     document.getElementById('clear-filters').addEventListener('click', clearFilters);
 }
 
+// Generate a color palette for tags
+function generateTagColors(tags) {
+    // Predefined color palette with good contrast
+    const colors = [
+        '#e74c3c', // red
+        '#3498db', // blue
+        '#2ecc71', // green
+        '#f39c12', // orange
+        '#9b59b6', // purple
+        '#1abc9c', // turquoise
+        '#e67e22', // dark orange
+        '#34495e', // dark gray
+        '#16a085', // dark turquoise
+        '#27ae60', // dark green
+        '#2980b9', // dark blue
+        '#8e44ad', // dark purple
+        '#c0392b', // dark red
+        '#d35400', // pumpkin
+        '#7f8c8d', // gray
+        '#e91e63', // pink
+        '#00bcd4', // cyan
+        '#ff5722', // deep orange
+        '#795548', // brown
+        '#607d8b'  // blue gray
+    ];
+    
+    const tagColors = {};
+    tags.forEach((tag, index) => {
+        tagColors[tag.name] = colors[index % colors.length];
+    });
+    return tagColors;
+}
+
 // Load all available tags
 async function loadTags() {
     try {
@@ -29,6 +63,9 @@ async function loadTags() {
         
         const data = await response.json();
         state.tags = data.tags || [];
+        
+        // Generate colors for all tags
+        state.tagColors = generateTagColors(state.tags);
         
         renderTags();
     } catch (error) {
@@ -47,17 +84,22 @@ function renderTags() {
         return;
     }
     
-    container.innerHTML = state.tags.map(tag => `
-        <div class="tag-item ${state.selectedTags.has(tag.name) ? 'selected' : ''}" 
-             data-tag="${tag.name}"
-             onclick="toggleTag('${escapeHtml(tag.name)}')">
-            <input type="checkbox" 
-                   ${state.selectedTags.has(tag.name) ? 'checked' : ''}
-                   onclick="event.stopPropagation(); toggleTag('${escapeHtml(tag.name)}')">
-            <span class="tag-name">${escapeHtml(tag.name)}</span>
-            <span class="tag-count">${tag.count}</span>
-        </div>
-    `).join('');
+    container.innerHTML = state.tags.map(tag => {
+        const color = state.tagColors[tag.name] || '#667eea';
+        const style = state.selectedTags.has(tag.name) ? `style="background-color: ${color}; border-color: ${color};"` : '';
+        return `
+            <div class="tag-item ${state.selectedTags.has(tag.name) ? 'selected' : ''}" 
+                 data-tag="${tag.name}"
+                 ${style}
+                 onclick="toggleTag('${escapeHtml(tag.name)}')">
+                <input type="checkbox" 
+                       ${state.selectedTags.has(tag.name) ? 'checked' : ''}
+                       onclick="event.stopPropagation(); toggleTag('${escapeHtml(tag.name)}')">
+                <span class="tag-name">${escapeHtml(tag.name)}</span>
+                <span class="tag-count">${tag.count}</span>
+            </div>
+        `;
+    }).join('');
 }
 
 // Toggle tag selection
@@ -91,12 +133,15 @@ function renderSelectedTags() {
         return;
     }
     
-    container.innerHTML = Array.from(state.selectedTags).map(tag => `
-        <div class="selected-tag">
-            ${escapeHtml(tag)}
-            <button onclick="toggleTag('${escapeHtml(tag)}')" title="Remove filter">×</button>
-        </div>
-    `).join('');
+    container.innerHTML = Array.from(state.selectedTags).map(tag => {
+        const color = state.tagColors[tag] || '#667eea';
+        return `
+            <div class="selected-tag" style="background-color: ${color};">
+                ${escapeHtml(tag)}
+                <button onclick="toggleTag('${escapeHtml(tag)}')" title="Remove filter">×</button>
+            </div>
+        `;
+    }).join('');
 }
 
 // Load records based on selected tags
@@ -149,9 +194,10 @@ function renderRecords() {
                 </div>
                 <div class="record-path">${escapeHtml(record.path)}</div>
                 <div class="record-tags">
-                    ${record.tags.map(tag => 
-                        `<span class="record-tag">${escapeHtml(tag)}</span>`
-                    ).join('')}
+                    ${record.tags.map(tag => {
+                        const color = state.tagColors[tag] || '#667eea';
+                        return `<span class="record-tag" style="background-color: ${color}; color: white;">${escapeHtml(tag)}</span>`;
+                    }).join('')}
                 </div>
             </div>
             <div class="record-details" id="details-${record.id}">
@@ -221,31 +267,39 @@ function applyHighlights(text, highlights) {
     // Escape HTML first
     let highlightedText = escapeHtml(text);
     
-    // Collect all unique matched values from all rules
-    const allMatches = new Set();
-    Object.values(highlights).forEach(matches => {
+    // Create a map of match -> tags (for coloring)
+    const matchToTags = {};
+    Object.entries(highlights).forEach(([tag, matches]) => {
         matches.forEach(match => {
             // Skip negative conditions and empty matches
             if (match && !match.startsWith('(not:')) {
-                allMatches.add(match);
+                if (!matchToTags[match]) {
+                    matchToTags[match] = [];
+                }
+                matchToTags[match].push(tag);
             }
         });
     });
     
     // Sort matches by length (descending) to handle longer matches first
     // This prevents partial matches from breaking longer ones
-    const sortedMatches = Array.from(allMatches).sort((a, b) => b.length - a.length);
+    const sortedMatches = Object.keys(matchToTags).sort((a, b) => b.length - a.length);
     
-    // Apply highlights to each unique match
+    // Apply highlights to each unique match with tag color
     sortedMatches.forEach(match => {
         if (match) {
             // Escape the match for use in regex
             const escapedMatch = match.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
             // Create case-insensitive global regex
             const regex = new RegExp(escapedMatch, 'gi');
-            // Replace with highlighted version
+            
+            // Get the first tag's color for this match
+            const tag = matchToTags[match][0];
+            const color = state.tagColors[tag] || '#ffeb3b';
+            
+            // Replace with highlighted version using tag color
             highlightedText = highlightedText.replace(regex, (matched) => {
-                return `<span class="highlight">${matched}</span>`;
+                return `<span class="highlight" style="background-color: ${color};">${matched}</span>`;
             });
         }
     });

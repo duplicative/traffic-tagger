@@ -211,11 +211,39 @@
 
 ---
 
+---
+
+## Step 11: Color-Coded Tag Highlighting - Completed
+
+**Date:** 2025-10-30
+
+**Actions Taken:**
+- Enhanced frontend to assign unique colors to each tag from a 20-color palette
+- Added `state.tagColors` object to store tag-to-color mappings
+- Created `generateTagColors()` function with predefined high-contrast colors
+- Updated tag sidebar rendering to display selected tags with their assigned colors
+- Modified selected tags pills to use tag-specific background colors
+- Updated record tag badges to use color-coded backgrounds with white text
+- Enhanced `applyHighlights()` function to apply tag colors to matched text highlights:
+  - Created `matchToTags` mapping to track which tags matched which strings
+  - Applied the first matching tag's color to each highlighted substring
+  - Preserved proper highlighting precedence (longer matches first)
+- Updated CSS `.highlight` class styling:
+  - Changed to white text for better contrast on colored backgrounds
+  - Added text shadow and box shadow for better visibility
+  - Increased padding and border radius for improved appearance
+- Rebuilt and restarted all Docker containers
+- Verified color coordination between tag badges and highlighted text
+
+**Status:** Color-coded highlighting is fully operational. Each tag now has a unique color that is consistently applied to tag badges in the sidebar, selected filters, record tags, and matched text highlights in HTTP content, providing immediate visual correlation between tags and their matched values.
+
+---
+
 ## Next Steps
 
-1. **Production Use:** The system is ready for production data ingestion with hot reload and visual highlights
-2. **Rule Refinement:** Simply edit `data/rules.yaml` - changes will be automatically applied with updated highlights
+1. **Production Use:** The system is ready for production data ingestion with hot reload and color-coded visual highlights
+2. **Rule Refinement:** Simply edit `data/rules.yaml` - changes will be automatically applied with updated color-coded highlights
 3. **Data Management:** Drop CSV files into `data/` directory for automatic processing
 4. **Monitoring:** 
-   - Access web UI at http://localhost:9999/ to filter and view tagged traffic with highlights
+   - Access web UI at http://localhost:9999/ to filter and view tagged traffic with color-coded highlights
    - Monitor watcher activity: `docker compose logs -f watcher`
