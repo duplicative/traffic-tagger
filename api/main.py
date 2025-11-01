@@ -277,6 +277,45 @@ async def post_enrichment_events(request: EnrichmentEventsRequest):
         raise HTTPException(status_code=500, detail=f"Error storing enrichment events: {str(e)}")
 
 
+@app.delete("/api/clear-all")
+async def clear_all_records():
+    """
+    Clear all records from all collections in the database.
+    This allows users to start fresh analysis with new data.
+    
+    Returns:
+        Success message with count of deleted records
+    """
+    try:
+        deleted_counts = {}
+        
+        # List of all collections to clear
+        collections_to_clear = [
+            "records",           # HTTP traffic records
+            "dom_snapshots",     # Client-side DOM events
+            "js_executions",     # Client-side JS execution events
+            "storage_states",    # Client-side storage events
+            "watcher_metadata"   # Watcher tracking metadata
+        ]
+        
+        total_deleted = 0
+        
+        for collection_name in collections_to_clear:
+            collection = db[collection_name]
+            result = collection.delete_many({})
+            deleted_counts[collection_name] = result.deleted_count
+            total_deleted += result.deleted_count
+        
+        return {
+            "status": "success",
+            "message": f"Cleared {total_deleted} total records from database",
+            "details": deleted_counts
+        }
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error clearing database: {str(e)}")
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

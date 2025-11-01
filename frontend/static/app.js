@@ -19,7 +19,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Setup event listeners
 function setupEventListeners() {
-    document.getElementById('clear-filters').addEventListener('click', clearFilters);
+    document.getElementById('clear-filters').addEventListener('click', clearDatabase);
 }
 
 // Generate a color palette for tags
@@ -56,9 +56,16 @@ function generateTagColors(tags) {
 }
 
 // Load all available tags
-async function loadTags() {
+async function loadTags(bustCache = false) {
     try {
-        const response = await fetch(`${API_BASE}/tags`);
+        // Add cache busting parameter if requested
+        const url = bustCache 
+            ? `${API_BASE}/tags?_t=${Date.now()}`
+            : `${API_BASE}/tags`;
+        
+        const response = await fetch(url, {
+            cache: bustCache ? 'no-store' : 'default'
+        });
         if (!response.ok) throw new Error('Failed to fetch tags');
         
         const data = await response.json();
@@ -115,13 +122,82 @@ function toggleTag(tagName) {
     loadRecords();
 }
 
-// Clear all filters
+// Clear all filters (old function - kept for compatibility)
 function clearFilters() {
     state.selectedTags.clear();
     renderTags();
     renderSelectedTags();
     document.getElementById('records-container').innerHTML = 
         '<p class="info">Select tags to filter records</p>';
+}
+
+// Clear entire database
+async function clearDatabase() {
+    // Show confirmation dialog
+    const confirmed = confirm(
+        'Are you sure you want to clear ALL records from the database?\n\n' +
+        'This will permanently delete:\n' +
+        '• All HTTP traffic records\n' +
+        '• All client-side enrichment events\n' +
+        '• All watcher metadata\n\n' +
+        'This action CANNOT be undone!'
+    );
+    
+    if (!confirmed) {
+        return;
+    }
+    
+    try {
+        // Show loading state
+        const container = document.getElementById('records-container');
+        container.innerHTML = '<p class="loading">Clearing database...</p>';
+        
+        // Call API to clear database
+        const response = await fetch(`${API_BASE}/clear-all`, {
+            method: 'DELETE'
+        });
+        
+        if (!response.ok) {
+            throw new Error(`Failed to clear database: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        // Show success message
+        alert(
+            `Database cleared successfully!\n\n` +
+            `Deleted ${data.message}\n\n` +
+            `Details:\n` +
+            Object.entries(data.details)
+                .map(([collection, count]) => `  ${collection}: ${count} records`)
+                .join('\n')
+        );
+        
+        // Clear ALL local state completely
+        state.tags = [];
+        state.selectedTags.clear();
+        state.records = [];
+        state.expandedRecords.clear();
+        state.tagColors = {};
+        
+        // Force reload tags from API (with cache busting to prevent stale data)
+        await loadTags(true);
+        
+        // Force re-render tags sidebar (should show "No tags found")
+        renderTags();
+        
+        // Clear selected tags UI
+        renderSelectedTags();
+        
+        // Clear records container
+        container.innerHTML = '<p class="info">Database cleared. Import new CSV data to begin analysis.</p>';
+        
+    } catch (error) {
+        console.error('Error clearing database:', error);
+        alert('Error clearing database: ' + error.message);
+        document.getElementById('records-container').innerHTML = 
+            '<p class="error">Error clearing database. Please try again.</p>';
+    }
 }
 
 // Render selected tags in the content header

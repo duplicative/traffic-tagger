@@ -32,3 +32,12 @@ Implemented comprehensive color-coding system that assigns unique colors from a 
 
 ## Sidecar Integration Phase 1: Client-Side Enrichment Data Ingestion | 2025-10-31
 Integrated sidecar-extension with traffic-tagger to enrich HTTP analysis with client-side browser events. Created three new MongoDB collections (dom_snapshots, js_executions, storage_states) with URL indexes, implemented POST /api/enrichment-events endpoint with event routing and validation, and modified sidecar-extension background.js to send enrichment events via HTTP batching (10 events or 5s timeout) while disabling HTTP_TRANSACTION events that duplicate CSV ingestion.
+
+## Sidecar Extension Popup Fix | 2025-11-01
+Resolved backend connection error in sidecar extension popup by updating popup.js to connect to traffic-tagger API (port 8000) instead of deprecated backend server (port 8555). Modified status check to recognize traffic-tagger API response format, updated "Open Attack Console" button to open traffic-tagger web UI on port 9999, and implemented event count tracking in message-logger.js using local storage instead of removed backend stats endpoint.
+
+## Clear Database Feature | 2025-11-01
+Added DELETE /api/clear-all endpoint to remove all records from all database collections (records, dom_snapshots, js_executions, storage_states, watcher_metadata), enabling users to start fresh analysis sessions. Implemented frontend clearDatabase() function with confirmation dialog, loading state, and detailed success feedback showing per-collection deletion counts. Updated "Clear All" button to "Clear Database" with tooltip and safety warnings to prevent accidental data loss.
+
+## Clear Database Frontend Caching Fix | 2025-11-01
+Resolved frontend caching issue where UI continued displaying old tags and records after database was cleared. Enhanced clearDatabase() function to completely reset all state variables (tags, selectedTags, records, expandedRecords, tagColors) and added cache-busting functionality to loadTags() with timestamp query parameter and cache: 'no-store' fetch option. Implemented explicit re-render call after state clearing to ensure UI updates immediately reflect empty database state.
