@@ -54,12 +54,13 @@ function updateActiveTabDisplay(tab) {
 
 /**
  * Get backend HTTP URL from storage
+ * Now points to traffic-tagger API (port 8000)
  */
 function getBackendHttpUrl() {
   return new Promise((resolve) => {
     chrome.storage.sync.get(['backendIp', 'backendPort'], (result) => {
       const ip = result.backendIp || 'localhost';
-      const port = result.backendPort || '8555';
+      const port = result.backendPort || '8000'; // Changed from 8555 to 8000
       resolve(`http://${ip}:${port}`);
     });
   });
@@ -67,22 +68,27 @@ function getBackendHttpUrl() {
 
 /**
  * Check backend connection status
+ * Now checks traffic-tagger API
  */
 async function checkBackendStatus() {
   const backendUrl = await getBackendHttpUrl();
-  // Try to connect to check status
+  // Try to connect to traffic-tagger API
   fetch(`${backendUrl}/`)
     .then(response => response.json())
     .then(data => {
-      if (data.status === 'running') {
+      // Traffic-tagger API returns {message: "HTTP Traffic Tagger API", version: "1.0"}
+      if (data.message && data.message.includes('Traffic Tagger')) {
         backendStatus.classList.add('connected');
-        backendStatusText.textContent = 'Backend Connected';
+        backendStatusText.textContent = 'API Connected';
+      } else {
+        backendStatus.classList.remove('connected');
+        backendStatusText.textContent = 'API Offline';
       }
     })
     .catch(error => {
       backendStatus.classList.remove('connected');
-      backendStatusText.textContent = 'Backend Offline';
-      console.error('Backend connection error:', error);
+      backendStatusText.textContent = 'API Offline';
+      console.error('API connection error:', error);
     });
 }
 
@@ -157,12 +163,11 @@ function updateMonitoringUI(monitoring) {
 }
 
 /**
- * Open Attack Console UI
+ * Open Traffic Tagger Web UI
  */
 async function openAttackConsole() {
-  const consoleUrl = await getBackendHttpUrl();
-  // Open the Attack Console in a new tab
-  chrome.tabs.create({ url: consoleUrl });
+  // Traffic-tagger web UI is on port 9999
+  chrome.tabs.create({ url: 'http://localhost:9999/' });
 }
 
 /**
@@ -207,17 +212,15 @@ async function clearLogs() {
  * Update UI periodically
  */
 async function updateUI() {
-  const backendUrl = await getBackendHttpUrl();
-  // Update event count (you could get this from background script storage)
+  // Get event count from local storage (logged by message-logger.js)
   try {
-    const response = await fetch(`${backendUrl}/api/stats`);
-    const stats = await response.json();
-    
-    if (stats.vector_store && stats.vector_store.total_events !== undefined) {
-      eventCountDisplay.textContent = stats.vector_store.total_events;
-    }
+    chrome.storage.local.get(['messageCount'], (result) => {
+      if (result.messageCount !== undefined) {
+        eventCountDisplay.textContent = result.messageCount;
+      }
+    });
   } catch (error) {
-    // Silently fail if backend is not available
+    // Silently fail
   }
 }
 

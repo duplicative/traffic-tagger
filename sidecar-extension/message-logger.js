@@ -62,12 +62,14 @@ class MessageLogger {
    */
   storeLog(filename, entry) {
     // Store in chrome.storage.local
-    chrome.storage.local.get([filename], (result) => {
+    chrome.storage.local.get([filename, 'messageCount'], (result) => {
       const currentLog = result[filename] || `# ${filename.replace('.md', '')} Events Log\n\n`;
       const updatedLog = currentLog + entry;
+      const currentCount = result.messageCount || 0;
       
       chrome.storage.local.set({
-        [filename]: updatedLog
+        [filename]: updatedLog,
+        messageCount: currentCount + 1
       });
     });
   }
@@ -107,7 +109,8 @@ class MessageLogger {
       'HTTP_TRANSACTION.md',
       'DOM_SNAPSHOT.md',
       'JS_EXECUTION.md',
-      'STORAGE_STATE.md'
+      'STORAGE_STATE.md',
+      'messageCount'
     ];
 
     chrome.storage.local.remove(filenames);
