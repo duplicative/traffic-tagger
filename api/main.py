@@ -1,11 +1,12 @@
 """FastAPI backend for HTTP Traffic Tagger."""
 import os
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Any
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pymongo import MongoClient
 from bson import ObjectId
 from pydantic import BaseModel, Field
+from datetime import datetime
 
 app = FastAPI(title="HTTP Traffic Tagger API")
 
@@ -68,6 +69,20 @@ class RecordDetail(BaseModel):
     tags: List[str]
     highlights: Dict[str, List[str]] = {}
     processed_at: str
+
+
+class EnrichmentEvent(BaseModel):
+    """Enrichment event model from sidecar-extension."""
+    eventId: str
+    timestamp: str
+    eventType: str
+    url: str
+    data: Dict[str, Any]
+
+
+class EnrichmentEventsRequest(BaseModel):
+    """Request body for enrichment events endpoint."""
+    events: List[EnrichmentEvent]
 
 
 @app.get("/")
@@ -204,6 +219,62 @@ async def get_record(record_id: str):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching record: {str(e)}")
+
+
+@app.post("/api/enrichment-events")
+async def post_enrichment_events(request: EnrichmentEventsRequest):
+    """
+    Receive and store enrichment events from sidecar-extension.
+    
+    Args:
+        request: EnrichmentEventsRequest containing list of events
+        
+    Returns:
+        Success message with count of stored events
+    """
+    try:
+        stored_counts = {
+            "dom_snapshots": 0,
+            "js_executions": 0,
+            "storage_states": 0
+        }
+        
+        for event in request.events:
+            # Convert Pydantic model to dict
+            event_dict = event.dict()
+            
+            # Route event to appropriate collection based on eventType
+            if event.eventType == "DOM_SNAPSHOT":
+                target_collection = db["dom_snapshots"]
+                stored_counts["dom_snapshots"] += 1
+            elif event.eventType == "JS_EXECUTION":
+                target_collection = db["js_executions"]
+                stored_counts["js_executions"] += 1
+            elif event.eventType == "STORAGE_STATE":
+                target_collection = db["storage_states"]
+                stored_counts["storage_states"] += 1
+            else:
+                # Skip unknown event types
+                continue
+            
+            # Add received timestamp
+            event_dict["received_at"] = datetime.utcnow().isoformat()
+            
+            # Upsert by eventId to handle duplicates
+            target_collection.update_one(
+                {"eventId": event.eventId},
+                {"$set": event_dict},
+                upsert=True
+            )
+        
+        return {
+            "status": "success",
+            "message": f"Stored {sum(stored_counts.values())} events",
+            "details": stored_counts
+        }
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error storing enrichment events: {str(e)}")
 
 
 if __name__ == "__main__":

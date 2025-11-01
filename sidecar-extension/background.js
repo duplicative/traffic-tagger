@@ -9,6 +9,7 @@ importScripts('message-logger.js');
 
 // Configuration
 const RECONNECT_DELAY = 5000; // 5 seconds
+const TAGGER_API_URL = 'http://localhost:8000/api/enrichment-events'; // Traffic Tagger API
 
 // State management
 let websocket = null;
@@ -16,12 +17,18 @@ let monitoredTabs = new Set();
 let pendingRequests = new Map(); // requestId -> request data
 let eventQueue = []; // Queue for events when WebSocket is disconnected
 const MAX_QUEUE_SIZE = 100;
+let enrichmentEventsBatch = []; // Batch enrichment events for traffic-tagger
+const BATCH_SIZE = 10;
+const BATCH_TIMEOUT = 5000; // 5 seconds
+let batchTimer = null;
 
 /**
- * WebSocket Connection Management
+ * WebSocket Connection Management (DISABLED for traffic-tagger integration)
+ * Enrichment events now go directly to traffic-tagger API via HTTP
  */
 class BackendConnection {
   constructor() {
+    // WebSocket functionality disabled
     this.ws = null;
     this.reconnectAttempts = 0;
     this.maxReconnectAttempts = 10;
@@ -30,118 +37,100 @@ class BackendConnection {
   }
 
   async getBackendUrl() {
-    return new Promise((resolve) => {
-      chrome.storage.sync.get(['backendIp', 'backendPort'], (result) => {
-        const ip = result.backendIp || 'localhost';
-        const port = result.backendPort || '8555';
-        resolve(`ws://${ip}:${port}/ws/events`);
-      });
-    });
+    // Disabled - using HTTP API instead
+    return null;
   }
 
   async connect() {
-    if (this.isConnecting || (this.ws && this.ws.readyState === WebSocket.OPEN)) {
-      return;
-    }
-
-    this.isConnecting = true;
-    this.backendUrl = await this.getBackendUrl();
-    console.log('[Sidecar] Connecting to backend...', this.backendUrl);
-
-    try {
-      this.ws = new WebSocket(this.backendUrl);
-
-      this.ws.onopen = () => {
-        console.log('[Sidecar] Connected to backend');
-        this.reconnectAttempts = 0;
-        this.isConnecting = false;
-        this.flushQueue();
-      };
-
-      this.ws.onmessage = (event) => {
-        try {
-          const message = JSON.parse(event.data);
-          this.handleMessage(message);
-        } catch (e) {
-          console.error('[Sidecar] Error parsing message:', e);
-        }
-      };
-
-      this.ws.onerror = (error) => {
-        console.error('[Sidecar] WebSocket error:', error);
-      };
-
-      this.ws.onclose = () => {
-        console.log('[Sidecar] Disconnected from backend');
-        this.isConnecting = false;
-        this.ws = null;
-        this.scheduleReconnect();
-      };
-    } catch (error) {
-      console.error('[Sidecar] Connection error:', error);
-      this.isConnecting = false;
-      this.scheduleReconnect();
-    }
+    // Disabled - using HTTP API instead
+    console.log('[Sidecar] WebSocket connection disabled - using HTTP API for enrichment events');
   }
 
   scheduleReconnect() {
-    if (this.reconnectAttempts < this.maxReconnectAttempts) {
-      this.reconnectAttempts++;
-      console.log(`[Sidecar] Reconnecting in ${RECONNECT_DELAY}ms (attempt ${this.reconnectAttempts})...`);
-      setTimeout(() => this.connect(), RECONNECT_DELAY);
-    } else {
-      console.error('[Sidecar] Max reconnection attempts reached. Please restart the extension.');
-    }
+    // Disabled
   }
 
   sendEvent(event) {
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      try {
-        this.ws.send(JSON.stringify(event));
-      } catch (e) {
-        console.error('[Sidecar] Error sending event:', e);
-        this.queueEvent(event);
-      }
-    } else {
-      this.queueEvent(event);
-    }
+    // Disabled - HTTP_TRANSACTION events no longer sent
+    console.log('[Sidecar] WebSocket sendEvent disabled - HTTP_TRANSACTION events not sent');
   }
 
   queueEvent(event) {
-    if (eventQueue.length < MAX_QUEUE_SIZE) {
-      eventQueue.push(event);
-    } else {
-      console.warn('[Sidecar] Event queue full, dropping oldest event');
-      eventQueue.shift();
-      eventQueue.push(event);
-    }
+    // Disabled
   }
 
   flushQueue() {
-    console.log(`[Sidecar] Flushing ${eventQueue.length} queued events`);
-    while (eventQueue.length > 0) {
-      const event = eventQueue.shift();
-      this.sendEvent(event);
-    }
+    // Disabled
   }
 
   handleMessage(message) {
-    if (message.type === 'ack') {
-      console.log('[Sidecar] Event acknowledged:', message.eventId);
-    } else if (message.type === 'error') {
-      console.error('[Sidecar] Backend error:', message.message);
-    }
+    // Disabled
   }
 
   disconnect() {
-    if (this.ws) {
-      this.ws.close();
-      this.ws = null;
-    }
+    // Disabled
   }
 }
 
 const backendConnection = new BackendConnection();
+
+/**
+ * Send enrichment events to traffic-tagger API
+ */
+async function sendEnrichmentData(events) {
+  if (events.length === 0) {
+    return;
+  }
+
+  try {
+    const response = await fetch(TAGGER_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ events })
+    });
+
+    if (response.ok) {
+      const result = await response.json();
+      console.log('[Sidecar] Sent enrichment events to traffic-tagger:', result);
+    } else {
+      console.error('[Sidecar] Error sending enrichment events:', response.status, response.statusText);
+    }
+  } catch (error) {
+    console.error('[Sidecar] Error sending enrichment events:', error);
+  }
+}
+
+/**
+ * Batch enrichment events and send periodically
+ */
+function addEnrichmentEvent(event) {
+  enrichmentEventsBatch.push(event);
+  
+  // Send immediately if batch is full
+  if (enrichmentEventsBatch.length >= BATCH_SIZE) {
+    flushEnrichmentBatch();
+  } else {
+    // Schedule batch send if not already scheduled
+    if (!batchTimer) {
+      batchTimer = setTimeout(flushEnrichmentBatch, BATCH_TIMEOUT);
+    }
+  }
+}
+
+function flushEnrichmentBatch() {
+  if (batchTimer) {
+    clearTimeout(batchTimer);
+    batchTimer = null;
+  }
+  
+  if (enrichmentEventsBatch.length > 0) {
+    const eventsToSend = [...enrichmentEventsBatch];
+    enrichmentEventsBatch = [];
+    sendEnrichmentData(eventsToSend);
+  }
+}
 
 /**
  * Network Interception using Chrome Debugger API
@@ -261,23 +250,13 @@ chrome.debugger.onEvent.addListener((source, method, params) => {
 });
 
 /**
- * Send HTTP Transaction Event to Backend
+ * Send HTTP Transaction Event to Backend (DISABLED)
+ * HTTP traffic is ingested via CSV files in traffic-tagger
  */
 function sendHttpTransactionEvent(requestData) {
-  const event = {
-    eventId: generateUUID(),
-    timestamp: requestData.timestamp,
-    eventType: 'HTTP_TRANSACTION',
-    url: requestData.request.url,
-    data: {
-      request: requestData.request,
-      response: requestData.response
-    }
-  };
-
-  console.log('[Sidecar] Sending HTTP_TRANSACTION:', event.url);
-  messageLogger.logMessage(event);
-  backendConnection.sendEvent(event);
+  // HTTP_TRANSACTION events disabled - traffic-tagger uses CSV ingestion
+  console.log('[Sidecar] HTTP_TRANSACTION event disabled (CSV ingestion used):', requestData.request.url);
+  // No longer sending HTTP_TRANSACTION events
 }
 
 /**
@@ -298,9 +277,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
     };
 
-    console.log('[Sidecar] Sending DOM_SNAPSHOT:', event.url);
+    console.log('[Sidecar] Batching DOM_SNAPSHOT for traffic-tagger:', event.url);
     messageLogger.logMessage(event);
-    backendConnection.sendEvent(event);
+    addEnrichmentEvent(event);
     sendResponse({ success: true });
   } 
   else if (message.type === 'JS_EXECUTION') {
@@ -316,9 +295,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
     };
 
-    console.log('[Sidecar] Sending JS_EXECUTION:', message.functionName);
+    console.log('[Sidecar] Batching JS_EXECUTION for traffic-tagger:', message.functionName);
     messageLogger.logMessage(event);
-    backendConnection.sendEvent(event);
+    addEnrichmentEvent(event);
     sendResponse({ success: true });
   }
   else if (message.type === 'STORAGE_STATE') {
@@ -334,9 +313,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
     };
 
-    console.log('[Sidecar] Sending STORAGE_STATE:', event.url);
+    console.log('[Sidecar] Batching STORAGE_STATE for traffic-tagger:', event.url);
     messageLogger.logMessage(event);
-    backendConnection.sendEvent(event);
+    addEnrichmentEvent(event);
     sendResponse({ success: true });
   }
   else if (message.type === 'START_MONITORING') {
@@ -392,4 +371,6 @@ function generateUUID() {
  * Initialize Extension
  */
 console.log('[Sidecar] Background service worker initialized');
-backendConnection.connect();
+console.log('[Sidecar] Traffic-tagger integration mode: enrichment events sent to', TAGGER_API_URL);
+console.log('[Sidecar] HTTP_TRANSACTION events disabled (CSV ingestion used)');
+// backendConnection.connect(); // Disabled - using HTTP API instead

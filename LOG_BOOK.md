@@ -29,3 +29,6 @@ Enhanced rule engine to return matched string values, updated data pipeline (CLI
 
 ## Color-Coded Tag Highlighting | 2025-10-30
 Implemented comprehensive color-coding system that assigns unique colors from a 20-color palette to each tag, with consistent color application across tag sidebar selections, filter pills, record tag badges, and matched text highlights in HTTP content, enabling instant visual correlation between tags and their corresponding matched values in traffic analysis.
+
+## Sidecar Integration Phase 1: Client-Side Enrichment Data Ingestion | 2025-10-31
+Integrated sidecar-extension with traffic-tagger to enrich HTTP analysis with client-side browser events. Created three new MongoDB collections (dom_snapshots, js_executions, storage_states) with URL indexes, implemented POST /api/enrichment-events endpoint with event routing and validation, and modified sidecar-extension background.js to send enrichment events via HTTP batching (10 events or 5s timeout) while disabling HTTP_TRANSACTION events that duplicate CSV ingestion.
