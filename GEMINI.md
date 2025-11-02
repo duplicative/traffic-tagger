@@ -65,3 +65,10 @@ uvicorn main:app --reload --port 8000
     *   The core tagging logic is externalized into `data/rules.yaml`, allowing for changes without code modification.
 *   **Data Schema:** The API (`api/main.py`) defines Pydantic models (`RecordSummary`, `RecordDetail`) that reflect the data structure stored in MongoDB.
 *   **Highlights Feature:** The rule engine (`shared/rule_engine.py`) has been updated to not only tag records but also to return the specific substrings (`highlights`) that caused a rule to match. This data is stored in the `highlights` field in MongoDB and is exposed via the `/api/record/{record_id}` endpoint.
+
+## Active Technologies
+- Python 3.11 + FastAPI (backend), plain JavaScript (frontend) (001-raw-data-browser)
+- MongoDB 5.0 (001-raw-data-browser)
+
+## Recent Changes
+- 001-raw-data-browser: Added Python 3.11 + FastAPI (backend), plain JavaScript (frontend)

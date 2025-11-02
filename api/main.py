@@ -277,6 +277,50 @@ async def post_enrichment_events(request: EnrichmentEventsRequest):
         raise HTTPException(status_code=500, detail=f"Error storing enrichment events: {str(e)}")
 
 
+@app.get("/api/raw-records")
+async def get_raw_records(
+    source: Optional[str] = Query(None, enum=["csv", "sidecar"]),
+    category: Optional[str] = Query(None, enum=["dom_snapshots", "js_executions", "storage_states"]),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=100)
+):
+    """
+    Get raw records from the database with filtering and pagination.
+    """
+    try:
+        skip = (page - 1) * page_size
+        query = {}
+        
+        if source == "csv":
+            target_collection = db["records"]
+        elif source == "sidecar":
+            if not category:
+                raise HTTPException(status_code=400, detail="Category is required for sidecar source")
+            target_collection = db[category]
+        else:
+            # If no source is specified, we can decide on a default or raise an error.
+            # For now, let's default to the main 'records' collection.
+            target_collection = db["records"]
+
+        records = []
+        for doc in target_collection.find(query).skip(skip).limit(page_size):
+            # Convert ObjectId to string for JSON serialization
+            if "_id" in doc:
+                doc["_id"] = str(doc["_id"])
+            records.append(doc)
+            
+        total_records = target_collection.count_documents(query)
+        total_pages = (total_records + page_size - 1) // page_size
+        
+        return {
+            "records": records,
+            "total_pages": total_pages,
+            "current_page": page
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching raw records: {str(e)}")
+
+
 @app.delete("/api/clear-all")
 async def clear_all_records():
     """
