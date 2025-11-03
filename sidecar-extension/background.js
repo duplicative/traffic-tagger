@@ -5,7 +5,7 @@
  */
 
 // Import message logger
-importScripts('message-logger.js');
+import { messageLogger } from './message-logger.js';
 
 // Configuration
 const RECONNECT_DELAY = 5000; // 5 seconds
@@ -324,7 +324,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   else if (message.type === 'STOP_MONITORING') {
     stopMonitoring(message.tabId);
-    sendResponse({ success. true });
+    sendResponse({ success: true });
   }
   else if (message.type === 'DOWNLOAD_LOGS') {
     messageLogger.downloadLogs();
