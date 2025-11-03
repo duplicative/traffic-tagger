@@ -286,37 +286,83 @@ async def get_raw_records(
 ):
     """
     Get raw records from the database with filtering and pagination.
+    
+    Args:
+        source: Filter by record source (csv or sidecar)
+        category: Filter by sidecar record category (only for sidecar source)
+        page: Page number for pagination
+        page_size: Number of records per page (max 100)
+        
+    Returns:
+        Dictionary with records list, pagination info, source, and category
     """
     try:
         skip = (page - 1) * page_size
-        query = {}
-        
-        if source == "csv":
-            target_collection = db["records"]
-        elif source == "sidecar":
-            if not category:
-                raise HTTPException(status_code=400, detail="Category is required for sidecar source")
-            target_collection = db[category]
-        else:
-            # If no source is specified, we can decide on a default or raise an error.
-            # For now, let's default to the main 'records' collection.
-            target_collection = db["records"]
-
         records = []
-        for doc in target_collection.find(query).skip(skip).limit(page_size):
-            # Convert ObjectId to string for JSON serialization
-            if "_id" in doc:
-                doc["_id"] = str(doc["_id"])
-            records.append(doc)
+        total_records = 0
+        actual_source = source or "csv"  # Default to CSV if no source specified
+        actual_category = None
+        
+        if source == "csv" or not source:
+            # Fetch from records collection (CSV data)
+            target_collection = db["records"]
+            actual_source = "csv"
             
-        total_records = target_collection.count_documents(query)
-        total_pages = (total_records + page_size - 1) // page_size
+            for doc in target_collection.find({}).skip(skip).limit(page_size):
+                # Convert ObjectId to string for JSON serialization
+                if "_id" in doc:
+                    doc["_id"] = str(doc["_id"])
+                records.append(doc)
+            
+            total_records = target_collection.count_documents({})
+            
+        elif source == "sidecar":
+            # Fetch from enrichment collections
+            if category:
+                # Specific category requested
+                target_collection = db[category]
+                actual_category = category
+                
+                for doc in target_collection.find({}).skip(skip).limit(page_size):
+                    if "_id" in doc:
+                        doc["_id"] = str(doc["_id"])
+                    records.append(doc)
+                
+                total_records = target_collection.count_documents({})
+            else:
+                # No category specified - fetch from all enrichment collections
+                collections_to_query = ["dom_snapshots", "js_executions", "storage_states"]
+                all_records = []
+                
+                for coll_name in collections_to_query:
+                    coll = db[coll_name]
+                    for doc in coll.find({}):
+                        if "_id" in doc:
+                            doc["_id"] = str(doc["_id"])
+                        doc["_collection"] = coll_name  # Add source collection info
+                        all_records.append(doc)
+                
+                # Sort by timestamp if available
+                all_records.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
+                
+                # Calculate pagination
+                total_records = len(all_records)
+                records = all_records[skip:skip + page_size]
+        
+        total_pages = max(1, (total_records + page_size - 1) // page_size)
         
         return {
             "records": records,
+            "total_records": total_records,
             "total_pages": total_pages,
-            "current_page": page
+            "current_page": page,
+            "page_size": page_size,
+            "source": actual_source,
+            "category": actual_category
         }
+    
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching raw records: {str(e)}")
 

@@ -5,6 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>HTTP Traffic Tagger</title>
     <link rel="stylesheet" href="styles.css">
+    <!-- Highlight.js for JSON syntax highlighting -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/json.min.js"></script>
 </head>
 <body>
     <div class="container">
@@ -13,32 +17,82 @@
             <p>Analyze and explore tagged HTTP traffic</p>
         </header>
         
-        <div class="main-content">
-            <!-- Left Column: Tag Filters -->
-            <aside class="sidebar">
-                <h2>Filter by Tags</h2>
-                <div id="tags-container">
-                    <p class="loading">Loading tags...</p>
-                </div>
-                <div class="filter-actions">
-                    <button id="clear-filters" class="btn-secondary" title="Clear all records from database">Clear Database</button>
-                </div>
-            </aside>
-            
-            <!-- Right Column: Records List -->
-            <main class="content">
-                <div class="content-header">
-                    <h2>Records</h2>
-                    <div id="selected-tags" class="selected-tags"></div>
+        <!-- Tab Navigation -->
+        <nav class="tabs">
+            <button class="tab-button active" data-tab="tagged-records">Tagged Records</button>
+            <button class="tab-button" data-tab="raw-data">Raw Data Browser</button>
+        </nav>
+        
+        <!-- Tagged Records Tab Content -->
+        <div id="tagged-records-tab" class="tab-content active">
+            <div class="main-content">
+                <!-- Left Column: Tag Filters -->
+                <aside class="sidebar">
+                    <h2>Filter by Tags</h2>
+                    <div id="tags-container">
+                        <p class="loading">Loading tags...</p>
+                    </div>
+                    <div class="filter-actions">
+                        <button id="clear-filters" class="btn-secondary" title="Clear all records from database">Clear Database</button>
+                    </div>
+                </aside>
+                
+                <!-- Right Column: Records List -->
+                <main class="content">
+                    <div class="content-header">
+                        <h2>Records</h2>
+                        <div id="selected-tags" class="selected-tags"></div>
+                    </div>
+                    
+                    <div id="records-container">
+                        <p class="info">Select tags to filter records</p>
+                    </div>
+                </main>
+            </div>
+        </div>
+        
+        <!-- Raw Data Browser Tab Content -->
+        <div id="raw-data-tab" class="tab-content">
+            <div class="raw-data-browser">
+                <!-- Filters -->
+                <div class="raw-data-filters">
+                    <div class="filter-group">
+                        <label for="source-filter">Source:</label>
+                        <select id="source-filter">
+                            <option value="csv">CSV Records</option>
+                            <option value="sidecar">Sidecar Events</option>
+                        </select>
+                    </div>
+                    
+                    <div class="filter-group" id="category-filter-group" style="display: none;">
+                        <label for="category-filter">Category:</label>
+                        <select id="category-filter">
+                            <option value="">All Categories</option>
+                            <option value="dom_snapshots">DOM Snapshots</option>
+                            <option value="js_executions">JS Executions</option>
+                            <option value="storage_states">Storage States</option>
+                        </select>
+                    </div>
+                    
+                    <button id="apply-filters" class="btn-primary">Apply Filters</button>
                 </div>
                 
-                <div id="records-container">
-                    <p class="info">Select tags to filter records</p>
+                <!-- Records List -->
+                <div id="raw-records-container">
+                    <p class="info">Loading records...</p>
                 </div>
-            </main>
+                
+                <!-- Pagination -->
+                <div id="raw-pagination" class="pagination" style="display: none;">
+                    <button id="prev-page" class="btn-secondary">Previous</button>
+                    <span id="page-info">Page 1 of 1</span>
+                    <button id="next-page" class="btn-secondary">Next</button>
+                </div>
+            </div>
         </div>
     </div>
     
     <script src="app.js"></script>
+    <script src="raw-data-browser.js"></script>
 </body>
 </html>
