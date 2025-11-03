@@ -120,3 +120,5 @@ class MessageLogger {
 
 // Export for use in other scripts
 const messageLogger = new MessageLogger();
+
+export { MessageLogger, messageLogger };
