@@ -1,12 +1,17 @@
 """FastAPI backend for HTTP Traffic Tagger."""
 import os
-from typing import List, Optional, Dict, Any
-from fastapi import FastAPI, HTTPException, Query
+import asyncio
+from typing import List, Optional, Dict, Any, Set
+from fastapi import FastAPI, HTTPException, Query, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pymongo import MongoClient
 from bson import ObjectId
 from pydantic import BaseModel, Field
 from datetime import datetime
+from urllib.parse import urlparse, urlunparse
+import sys
+sys.path.append('/app')
+from shared.rule_engine import RuleEngine
 
 app = FastAPI(title="HTTP Traffic Tagger API")
 
@@ -24,6 +29,20 @@ MONGO_URI = os.getenv('MONGO_URI', 'mongodb://localhost:27017/')
 client = MongoClient(MONGO_URI)
 db = client['http_tagger']
 collection = db['records']
+
+# Initialize Rule Engine with MongoDB client for correlation
+RULES_FILE = os.getenv('RULES_FILE', '/data/rules.yaml')
+try:
+    rule_engine = RuleEngine(RULES_FILE, db_client=client)
+    print(f"[API] Rule engine initialized with correlation support")
+    print(f"[API] Loaded {len(rule_engine.correlation_rules)} correlation rules")
+except Exception as e:
+    print(f"[API] Warning: Could not initialize rule engine: {e}")
+    rule_engine = None
+
+# Correlation task queue
+correlation_queue: asyncio.Queue = asyncio.Queue()
+processed_urls: Set[str] = set()  # Track recently processed URLs to avoid duplicates
 
 
 class TagInfo(BaseModel):
@@ -83,6 +102,90 @@ class EnrichmentEvent(BaseModel):
 class EnrichmentEventsRequest(BaseModel):
     """Request body for enrichment events endpoint."""
     events: List[EnrichmentEvent]
+
+
+def normalize_url_for_matching(url: str) -> str:
+    """
+    Normalize a URL by removing query parameters and fragments.
+    
+    Args:
+        url: Full URL string
+        
+    Returns:
+        Normalized URL without query/fragment
+    """
+    parsed = urlparse(url)
+    normalized = urlunparse((
+        parsed.scheme,
+        parsed.netloc,
+        parsed.path,
+        '',  # params
+        '',  # query (removed)
+        ''   # fragment (removed)
+    ))
+    return normalized
+
+
+def run_correlation_for_url(url: str):
+    """
+    Background task to run correlation analysis for a specific URL.
+    Finds all HTTP records matching the URL and applies correlation rules.
+    
+    Args:
+        url: The URL from enrichment event to correlate
+    """
+    if not rule_engine:
+        return
+    
+    try:
+        # Normalize the enrichment event URL
+        normalized_url = normalize_url_for_matching(url)
+        
+        print(f"[Correlation] Processing URL: {normalized_url}")
+        
+        # Find all HTTP records that match this URL
+        # Need to reconstruct URL from HTTP record fields and match
+        matching_records = []
+        for record in collection.find({}):
+            record_url = rule_engine.normalize_url(record)
+            if record_url == normalized_url:
+                matching_records.append(record)
+        
+        print(f"[Correlation] Found {len(matching_records)} matching HTTP records")
+        
+        # Run correlation analysis on each matching record
+        for record in matching_records:
+            new_tags, highlights = rule_engine.run_correlation_analysis(record)
+            
+            if new_tags:
+                print(f"[Correlation] Adding tags to record {record.get('_id')}: {new_tags}")
+                
+                # Update the record with new tags and highlights
+                existing_tags = record.get('tags', [])
+                existing_highlights = record.get('highlights', {})
+                
+                # Merge tags (avoid duplicates)
+                updated_tags = list(set(existing_tags + new_tags))
+                
+                # Merge highlights
+                updated_highlights = {**existing_highlights, **highlights}
+                
+                # Update MongoDB
+                collection.update_one(
+                    {"_id": record["_id"]},
+                    {"$set": {
+                        "tags": updated_tags,
+                        "highlights": updated_highlights,
+                        "correlation_processed_at": datetime.utcnow().isoformat()
+                    }}
+                )
+                
+                print(f"[Correlation] Updated record {record.get('_id')} with {len(new_tags)} new tags")
+    
+    except Exception as e:
+        print(f"[Correlation] Error processing URL {url}: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 @app.get("/")
@@ -222,12 +325,14 @@ async def get_record(record_id: str):
 
 
 @app.post("/api/enrichment-events")
-async def post_enrichment_events(request: EnrichmentEventsRequest):
+async def post_enrichment_events(request: EnrichmentEventsRequest, background_tasks: BackgroundTasks):
     """
     Receive and store enrichment events from sidecar-extension.
+    Triggers correlation analysis in background.
     
     Args:
         request: EnrichmentEventsRequest containing list of events
+        background_tasks: FastAPI background tasks for async correlation
         
     Returns:
         Success message with count of stored events
@@ -238,6 +343,8 @@ async def post_enrichment_events(request: EnrichmentEventsRequest):
             "js_executions": 0,
             "storage_states": 0
         }
+        
+        event_urls = set()
         
         for event in request.events:
             # Convert Pydantic model to dict
@@ -266,11 +373,20 @@ async def post_enrichment_events(request: EnrichmentEventsRequest):
                 {"$set": event_dict},
                 upsert=True
             )
+            
+            # Collect URL for correlation analysis
+            event_urls.add(event.url)
+        
+        # Queue correlation tasks for each unique URL
+        if rule_engine and event_urls:
+            for url in event_urls:
+                background_tasks.add_task(run_correlation_for_url, url)
         
         return {
             "status": "success",
             "message": f"Stored {sum(stored_counts.values())} events",
-            "details": stored_counts
+            "details": stored_counts,
+            "correlation_queued": len(event_urls) if rule_engine else 0
         }
     
     except Exception as e:

@@ -20,6 +20,8 @@ services:
     container_name: traffic_tagger_api
     environment:
       MONGO_URI: ${MONGO_URI}
+    volumes:
+      - ./data:/data:ro
     depends_on:
       - database
     networks:
