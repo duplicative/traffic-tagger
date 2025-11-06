@@ -247,12 +247,16 @@ class RuleEngine:
         
         return normalized
 
-    def run_correlation_analysis(self, http_record: Dict[str, Any]) -> Tuple[List[str], Dict[str, List[str]]]:
+    def run_correlation_analysis(self, http_record: Dict[str, Any], 
+                                window_start: float, window_end: float) -> Tuple[List[str], Dict[str, List[str]]]:
         """
-        Run correlation analysis on an HTTP record by querying enrichment collections.
+        Run correlation analysis on an HTTP record by querying enrichment collections
+        within a specific time window.
         
         Args:
             http_record: MongoDB document from records collection
+            window_start: Start of correlation time window (Unix timestamp)
+            window_end: End of correlation time window (Unix timestamp or inf)
             
         Returns:
             Tuple of (new tags to add, highlights dict)
@@ -273,7 +277,9 @@ class RuleEngine:
             if not rule.get('enabled', True):
                 continue
             
-            matched_values = self._evaluate_correlation_rule(rule, http_record, record_url)
+            matched_values = self._evaluate_correlation_rule(
+                rule, http_record, record_url, window_start, window_end
+            )
             if matched_values:
                 new_tags.append(rule['name'])
                 highlights[rule['name']] = matched_values
@@ -281,14 +287,16 @@ class RuleEngine:
         return new_tags, highlights
 
     def _evaluate_correlation_rule(self, rule: Dict[str, Any], http_record: Dict[str, Any], 
-                                   record_url: str) -> List[str]:
+                                   record_url: str, window_start: float, window_end: float) -> List[str]:
         """
-        Evaluate a single correlation rule.
+        Evaluate a single correlation rule within a time window.
         
         Args:
             rule: Correlation rule dictionary
             http_record: The HTTP record being analyzed
             record_url: Normalized URL of the HTTP record
+            window_start: Start of time window (Unix timestamp)
+            window_end: End of time window (Unix timestamp or inf)
             
         Returns:
             List of matched values if rule matches, empty list otherwise
@@ -303,7 +311,9 @@ class RuleEngine:
         condition_results = []
         
         for condition in conditions:
-            matched_values = self._evaluate_correlation_condition(condition, http_record, record_url)
+            matched_values = self._evaluate_correlation_condition(
+                condition, http_record, record_url, window_start, window_end
+            )
             condition_results.append(len(matched_values) > 0)
             all_matched_values.extend(matched_values)
         
@@ -317,33 +327,59 @@ class RuleEngine:
         return all_matched_values if rule_matches else []
 
     def _evaluate_correlation_condition(self, condition: Dict[str, Any], http_record: Dict[str, Any],
-                                       record_url: str) -> List[str]:
+                                       record_url: str, window_start: float, window_end: float) -> List[str]:
         """
-        Evaluate a single correlation condition by querying enrichment collections.
+        Evaluate a single correlation condition by querying enrichment collections
+        within a time window.
         
         Args:
             condition: Condition dictionary with source, target, operator, value
             http_record: The HTTP record being analyzed
             record_url: Normalized URL of the HTTP record
+            window_start: Start of time window (Unix timestamp)
+            window_end: End of time window (Unix timestamp or inf)
             
         Returns:
             List of matched values if condition matches, empty list otherwise
         """
+        from dateutil import parser
+        
         source = condition.get('source', '')  # e.g., 'dom_snapshots', 'js_executions'
         target = condition.get('target', '')  # e.g., 'data.functionName', 'data.html'
         operator = condition.get('operator', '')
         value = condition.get('value', '')
         
-        # Query the enrichment collection by normalized URL
+        # Query the enrichment collection by URL AND time window
         collection = self.db[source]
-        enrichment_events = list(collection.find({'url': record_url}))
         
-        if not enrichment_events:
+        # Build query with temporal constraints
+        query = {'url': record_url}
+        
+        # Note: MongoDB can't directly compare ISO strings with numeric timestamps
+        # We need to query all events for this URL and filter by timestamp in Python
+        enrichment_events = list(collection.find(query))
+        
+        # Filter events by time window
+        filtered_events = []
+        for event in enrichment_events:
+            try:
+                event_dt = parser.isoparse(event['timestamp'])
+                event_timestamp = event_dt.timestamp()
+                
+                # Check if event is within time window
+                if window_start <= event_timestamp < window_end:
+                    filtered_events.append(event)
+            except Exception as e:
+                # Skip events with invalid timestamps
+                print(f"[RuleEngine] Warning: Could not parse timestamp {event.get('timestamp')}: {e}")
+                continue
+        
+        if not filtered_events:
             return []
         
-        # Extract target values from all matching events
+        # Extract target values from all matching events within time window
         all_matched_values = []
-        for event in enrichment_events:
+        for event in filtered_events:
             target_value = self._extract_correlation_target(target, event)
             if target_value is not None:
                 target_value_str = str(target_value)

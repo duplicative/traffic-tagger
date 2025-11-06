@@ -126,43 +126,174 @@ def normalize_url_for_matching(url: str) -> str:
     return normalized
 
 
+def parse_iso_timestamp(iso_string: str) -> float:
+    """
+    Parse ISO 8601 timestamp string to Unix timestamp (seconds).
+    
+    Args:
+        iso_string: ISO 8601 formatted timestamp
+        
+    Returns:
+        Unix timestamp in seconds
+    """
+    from dateutil import parser
+    dt = parser.isoparse(iso_string)
+    return dt.timestamp()
+
+
+def find_preceding_http_record(event_url: str, event_timestamp: float, normalized_url: str):
+    """
+    Find the HTTP record that immediately precedes this sidecar event.
+    
+    Algorithm:
+    1. Find all HTTP records with matching normalized URL
+    2. Filter to records where response_created_at <= event_timestamp
+    3. Sort by response_created_at descending
+    4. Return the first (most recent before event)
+    
+    Args:
+        event_url: Original event URL (for logging)
+        event_timestamp: Event timestamp in seconds
+        normalized_url: Normalized URL for matching
+        
+    Returns:
+        HTTP record dict or None
+    """
+    # Find matching records that occurred BEFORE the event
+    matching_records = list(collection.find({
+        'normalized_url': normalized_url,
+        'response_created_at': {'$lte': event_timestamp}
+    }).sort('response_created_at', -1).limit(1))
+    
+    return matching_records[0] if matching_records else None
+
+
+def get_correlation_window(http_record, normalized_url):
+    """
+    Calculate the time window for this HTTP record.
+    Window extends from record time to next HTTP record time (or infinity).
+    
+    Args:
+        http_record: The HTTP record
+        normalized_url: Normalized URL to find next record
+        
+    Returns:
+        Tuple of (start_timestamp, end_timestamp)
+    """
+    start_time = http_record['response_created_at']
+    
+    # Find next HTTP record for same URL
+    next_records = list(collection.find({
+        'normalized_url': normalized_url,
+        'response_created_at': {'$gt': start_time}
+    }).sort('response_created_at', 1).limit(1))
+    
+    if next_records:
+        end_time = next_records[0]['response_created_at']
+    else:
+        end_time = float('inf')
+    
+    return (start_time, end_time)
+
+
 def run_correlation_for_url(url: str):
     """
-    Background task to run correlation analysis for a specific URL.
-    Finds all HTTP records matching the URL and applies correlation rules.
+    Background task implementing temporal-URL correlation strategy.
+    
+    Algorithm:
+    1. Get all sidecar events for this URL, sorted by timestamp
+    2. For each event, find the HTTP record that immediately precedes it
+    3. Calculate time window for that HTTP record
+    4. Run correlation rules on events within that time window
+    5. Update HTTP record with correlation results
     
     Args:
         url: The URL from enrichment event to correlate
+        
+    Returns:
+        Dict with 'success', 'records_updated', and optional 'message' keys
     """
     if not rule_engine:
-        return
+        return {'success': False, 'message': 'Rule engine not initialized', 'records_updated': 0}
     
     try:
-        # Normalize the enrichment event URL
+        # Normalize the event URL
         normalized_url = normalize_url_for_matching(url)
         
         print(f"[Correlation] Processing URL: {normalized_url}")
         
-        # Find all HTTP records that match this URL
-        # Need to reconstruct URL from HTTP record fields and match
-        matching_records = []
-        for record in collection.find({}):
-            record_url = rule_engine.normalize_url(record)
-            if record_url == normalized_url:
-                matching_records.append(record)
+        # Collect all events for this URL from all enrichment collections
+        all_events = []
+        for coll_name in ['dom_snapshots', 'js_executions', 'storage_states']:
+            events = list(db[coll_name].find({'url': url}))
+            for event in events:
+                event['_collection'] = coll_name
+                all_events.append(event)
         
-        print(f"[Correlation] Found {len(matching_records)} matching HTTP records")
+        print(f"[Correlation] Found {len(all_events)} sidecar events")
         
-        # Run correlation analysis on each matching record
-        for record in matching_records:
-            new_tags, highlights = rule_engine.run_correlation_analysis(record)
+        if not all_events:
+            return {'success': True, 'records_updated': 0, 'message': 'No events found for URL'}
+        
+        # Sort events by timestamp
+        all_events.sort(key=lambda e: parse_iso_timestamp(e['timestamp']))
+        
+        # Group events by their preceding HTTP record
+        record_events_map = {}  # record_id -> list of events
+        
+        for event in all_events:
+            event_timestamp = parse_iso_timestamp(event['timestamp'])
+            
+            # Find the HTTP record that this event belongs to
+            http_record = find_preceding_http_record(url, event_timestamp, normalized_url)
+            
+            if http_record:
+                record_id = str(http_record['_id'])
+                if record_id not in record_events_map:
+                    record_events_map[record_id] = {
+                        'record': http_record,
+                        'events': []
+                    }
+                record_events_map[record_id]['events'].append(event)
+            else:
+                print(f"[Correlation] No matching HTTP record found for event {event['eventId']} at {event['timestamp']}")
+        
+        print(f"[Correlation] Events mapped to {len(record_events_map)} HTTP records")
+        
+        # Process each HTTP record with its correlated events
+        for record_id, data in record_events_map.items():
+            http_record = data['record']
+            correlated_events = data['events']
+            
+            # Get time window for this HTTP record
+            window_start, window_end = get_correlation_window(http_record, normalized_url)
+            
+            print(f"[Correlation] Processing record {record_id} with {len(correlated_events)} events")
+            print(f"[Correlation] Time window: {window_start} to {window_end}")
+            
+            # Run correlation rules with time window
+            new_tags, highlights = rule_engine.run_correlation_analysis(
+                http_record,
+                window_start,
+                window_end
+            )
             
             if new_tags:
-                print(f"[Correlation] Adding tags to record {record.get('_id')}: {new_tags}")
+                print(f"[Correlation] Adding {len(new_tags)} tags to record {record_id}: {new_tags}")
                 
-                # Update the record with new tags and highlights
-                existing_tags = record.get('tags', [])
-                existing_highlights = record.get('highlights', {})
+                # Prepare correlation metadata
+                correlated_events_metadata = []
+                for event in correlated_events:
+                    correlated_events_metadata.append({
+                        'eventId': event['eventId'],
+                        'eventType': event['eventType'],
+                        'timestamp': event['timestamp'],
+                        'collection': event['_collection']
+                    })
+                
+                # Update the record with new tags, highlights, and metadata
+                existing_tags = http_record.get('tags', [])
+                existing_highlights = http_record.get('highlights', {})
                 
                 # Merge tags (avoid duplicates)
                 updated_tags = list(set(existing_tags + new_tags))
@@ -172,20 +303,36 @@ def run_correlation_for_url(url: str):
                 
                 # Update MongoDB
                 collection.update_one(
-                    {"_id": record["_id"]},
+                    {"_id": http_record["_id"]},
                     {"$set": {
                         "tags": updated_tags,
                         "highlights": updated_highlights,
-                        "correlation_processed_at": datetime.utcnow().isoformat()
+                        "correlation_processed_at": datetime.utcnow().isoformat(),
+                        "correlated_events": correlated_events_metadata,
+                        "correlation_window": {
+                            "start": window_start,
+                            "end": window_end if window_end != float('inf') else None
+                        }
                     }}
                 )
                 
-                print(f"[Correlation] Updated record {record.get('_id')} with {len(new_tags)} new tags")
+                print(f"[Correlation] Updated record {record_id} with {len(new_tags)} new tags")
+        
+        return {
+            'success': True,
+            'records_updated': len(record_events_map),
+            'message': f'Correlated {len(record_events_map)} records'
+        }
     
     except Exception as e:
         print(f"[Correlation] Error processing URL {url}: {e}")
         import traceback
         traceback.print_exc()
+        return {
+            'success': False,
+            'message': str(e),
+            'records_updated': 0
+        }
 
 
 @app.get("/")
@@ -481,6 +628,176 @@ async def get_raw_records(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching raw records: {str(e)}")
+
+
+@app.get("/api/correlation-timeline")
+async def get_correlation_timeline(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    url_filter: Optional[str] = Query(None)
+):
+    """
+    Get correlation timeline showing HTTP records with their correlated sidecar events.
+    
+    Args:
+        page: Page number for pagination
+        page_size: Number of records per page
+        url_filter: Optional URL filter (partial match)
+        
+    Returns:
+        Timeline data with HTTP records and nested correlated events
+    """
+    try:
+        skip = (page - 1) * page_size
+        
+        # Build query
+        query = {}
+        if url_filter:
+            query['normalized_url'] = {'$regex': url_filter, '$options': 'i'}
+        
+        # Get HTTP records sorted by timestamp
+        records_cursor = collection.find(query).sort('response_created_at', 1).skip(skip).limit(page_size)
+        total_records = collection.count_documents(query)
+        
+        timeline = []
+        
+        for record in records_cursor:
+            # Build timeline entry
+            entry = {
+                'http_record': {
+                    'id': str(record['_id']),
+                    'method': record.get('method', ''),
+                    'url': record.get('normalized_url', ''),
+                    'host': record.get('host', ''),
+                    'path': record.get('path', ''),
+                    'status': record.get('response_status_code', 0),
+                    'timestamp': record.get('response_created_at', 0),
+                    'tags': record.get('tags', [])
+                },
+                'correlated_events': [],
+                'correlation_window': record.get('correlation_window', {}),
+                'statistics': {
+                    'total_events': 0,
+                    'event_types': {},
+                    'tags_added': 0
+                }
+            }
+            
+            # Process correlated events
+            correlated_events_metadata = record.get('correlated_events', [])
+            for event_meta in correlated_events_metadata:
+                # Parse timestamp to calculate time delta
+                try:
+                    from dateutil import parser as date_parser
+                    event_dt = date_parser.isoparse(event_meta['timestamp'])
+                    event_timestamp = event_dt.timestamp()
+                    time_delta = int(event_timestamp - record['response_created_at'])
+                except:
+                    time_delta = 0
+                
+                event_entry = {
+                    'eventId': event_meta['eventId'],
+                    'eventType': event_meta['eventType'],
+                    'timestamp': event_meta['timestamp'],
+                    'time_delta': time_delta,
+                    'collection': event_meta.get('collection', '')
+                }
+                
+                entry['correlated_events'].append(event_entry)
+                
+                # Update statistics
+                event_type = event_meta['eventType']
+                if event_type not in entry['statistics']['event_types']:
+                    entry['statistics']['event_types'][event_type] = 0
+                entry['statistics']['event_types'][event_type] += 1
+            
+            entry['statistics']['total_events'] = len(correlated_events_metadata)
+            
+            # Count correlation-added tags (tags not present initially)
+            correlation_highlights = record.get('highlights', {})
+            entry['statistics']['tags_added'] = len([t for t in record.get('tags', []) if t in correlation_highlights])
+            
+            timeline.append(entry)
+        
+        # Calculate summary statistics
+        total_http_records = collection.count_documents({})
+        records_with_events = collection.count_documents({'correlated_events': {'$exists': True, '$ne': []}})
+        
+        return {
+            'timeline': timeline,
+            'pagination': {
+                'page': page,
+                'page_size': page_size,
+                'total_records': total_records,
+                'total_pages': (total_records + page_size - 1) // page_size
+            },
+            'summary': {
+                'total_http_records': total_http_records,
+                'records_with_events': records_with_events,
+                'records_without_events': total_http_records - records_with_events
+            }
+        }
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching correlation timeline: {str(e)}")
+
+
+@app.get("/api/correlation-stats")
+async def get_correlation_stats():
+    """
+    Get correlation statistics and metrics.
+    
+    Returns:
+        Statistics about correlation coverage and effectiveness
+    """
+    try:
+        # HTTP records statistics
+        total_http_records = collection.count_documents({})
+        records_with_events = collection.count_documents({'correlated_events': {'$exists': True, '$ne': []}})
+        
+        # Calculate average events per record
+        pipeline = [
+            {'$match': {'correlated_events': {'$exists': True}}},
+            {'$project': {'event_count': {'$size': {'$ifNull': ['$correlated_events', []]}}}},
+            {'$group': {
+                '_id': None,
+                'avg_events': {'$avg': '$event_count'},
+                'max_events': {'$max': '$event_count'}
+            }}
+        ]
+        
+        agg_result = list(collection.aggregate(pipeline))
+        avg_events = agg_result[0]['avg_events'] if agg_result else 0
+        max_events = agg_result[0]['max_events'] if agg_result else 0
+        
+        # Enrichment events statistics
+        total_enrichment_events = (
+            db['dom_snapshots'].count_documents({}) +
+            db['js_executions'].count_documents({}) +
+            db['storage_states'].count_documents({})
+        )
+        
+        return {
+            'http_records': {
+                'total': total_http_records,
+                'with_correlated_events': records_with_events,
+                'without_events': total_http_records - records_with_events,
+                'correlation_rate': round(records_with_events / total_http_records * 100, 2) if total_http_records > 0 else 0
+            },
+            'enrichment_events': {
+                'total': total_enrichment_events,
+                'dom_snapshots': db['dom_snapshots'].count_documents({}),
+                'js_executions': db['js_executions'].count_documents({}),
+                'storage_states': db['storage_states'].count_documents({})
+            },
+            'correlation_metrics': {
+                'avg_events_per_record': round(avg_events, 2),
+                'max_events_per_record': max_events
+            }
+        }
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching correlation stats: {str(e)}")
 
 
 @app.delete("/api/clear-all")

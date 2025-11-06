@@ -21,6 +21,7 @@
         <nav class="tabs">
             <button class="tab-button active" data-tab="tagged-records">Tagged Records</button>
             <button class="tab-button" data-tab="raw-data">Raw Data Browser</button>
+            <button class="tab-button" data-tab="correlation-timeline">Correlation Timeline</button>
         </nav>
         
         <!-- Tagged Records Tab Content -->
@@ -90,9 +91,42 @@
                 </div>
             </div>
         </div>
+        
+        <!-- Correlation Timeline Tab Content -->
+        <div id="correlation-timeline-tab" class="tab-content">
+            <div class="timeline-header">
+                <h2>Correlation Timeline</h2>
+                <div class="timeline-stats" id="timeline-stats">
+                    <span class="stat">Loading statistics...</span>
+                </div>
+            </div>
+            
+            <!-- Timeline Filters -->
+            <div class="timeline-filters">
+                <div class="filter-group">
+                    <label for="url-filter-timeline">Filter URL:</label>
+                    <input type="text" id="url-filter-timeline" placeholder="e.g., /api/users">
+                </div>
+                <button id="apply-timeline-filters" class="btn-primary">Apply Filter</button>
+                <button id="clear-timeline-filters" class="btn-secondary">Clear</button>
+            </div>
+            
+            <!-- Timeline Content -->
+            <div id="timeline-container" class="timeline-container">
+                <p class="info">Loading timeline...</p>
+            </div>
+            
+            <!-- Timeline Pagination -->
+            <div id="timeline-pagination" class="pagination" style="display: none;">
+                <button id="timeline-prev-page" class="btn-secondary">Previous</button>
+                <span id="timeline-page-info">Page 1 of 1</span>
+                <button id="timeline-next-page" class="btn-secondary">Next</button>
+            </div>
+        </div>
     </div>
     
     <script src="app.js"></script>
     <script src="raw-data-browser.js"></script>
+    <script src="correlation-timeline.js"></script>
 </body>
 </html>

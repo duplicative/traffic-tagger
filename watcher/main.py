@@ -12,6 +12,10 @@ from watchdog.events import FileSystemEventHandler, FileSystemEvent
 from pymongo import MongoClient, ASCENDING
 from shared.rule_engine import RuleEngine
 from shared.http_parser import HTTPParser
+import sys
+
+# Add api path for correlation functions
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'api'))
 
 
 # Configure logging
@@ -45,6 +49,11 @@ class DataWatcherHandler(FileSystemEventHandler):
         
         # Track processed CSV files to avoid duplicates
         self.processed_csv_files: Set[str] = self._load_processed_files()
+        
+        # Correlation tracking
+        self.last_correlation_time = 0
+        self.correlation_interval = 300  # Run correlation every 5 minutes
+        self.pending_correlation = False
         
         # MongoDB connection
         self.client = None
@@ -340,6 +349,11 @@ class DataWatcherHandler(FileSystemEventHandler):
             logger.info(f"- Records with Tags: {records_with_tags}")
             logger.info("=" * 60)
             
+            # Trigger correlation after CSV ingestion
+            if records_inserted > 0:
+                logger.info("New records added, triggering correlation...")
+                self._run_correlation()
+            
         except FileNotFoundError:
             logger.error(f"CSV file not found: {csv_file_path}")
         except Exception as e:
@@ -353,6 +367,97 @@ class DataWatcherHandler(FileSystemEventHandler):
             return decoded_str, False
         except Exception as e:
             return f"Decoding error: {str(e)}", True
+    
+    def _run_correlation(self):
+        """Run correlation on all URLs with enrichment events."""
+        logger.info("="  * 60)
+        logger.info("CORRELATION INITIATED")
+        logger.info("=" * 60)
+        
+        try:
+            # Import correlation function
+            from main import run_correlation_for_url
+            
+            # Get unique URLs from HTTP records
+            urls = self.collection.distinct('normalized_url')
+            logger.info(f"Found {len(urls)} unique URLs to correlate")
+            
+            # Check if we have enrichment events
+            total_events = (
+                self.db['dom_snapshots'].count_documents({}) +
+                self.db['js_executions'].count_documents({}) +
+                self.db['storage_states'].count_documents({})
+            )
+            
+            if total_events == 0:
+                logger.info("No enrichment events found. Skipping correlation.")
+                return
+            
+            logger.info(f"Found {total_events} enrichment events")
+            
+            # Run correlation for each URL
+            correlated_count = 0
+            error_count = 0
+            
+            for i, url in enumerate(urls, 1):
+                if not url:
+                    continue
+                
+                try:
+                    result = run_correlation_for_url(url)
+                    if result.get('success'):
+                        num_correlated = result.get('records_updated', 0)
+                        if num_correlated > 0:
+                            correlated_count += num_correlated
+                    else:
+                        error_count += 1
+                except Exception as e:
+                    logger.warning(f"Error correlating URL {url[:50]}: {e}")
+                    error_count += 1
+                
+                # Log progress every 50 URLs
+                if i % 50 == 0:
+                    logger.info(f"Progress: {i}/{len(urls)} URLs processed")
+            
+            # Get final statistics
+            records_with_events = self.collection.count_documents({
+                'correlated_events': {'$exists': True, '$ne': []}
+            })
+            total_records = self.collection.count_documents({})
+            correlation_rate = (records_with_events / total_records * 100) if total_records > 0 else 0
+            
+            logger.info("=" * 60)
+            logger.info("CORRELATION COMPLETE")
+            logger.info(f"- URLs Processed: {len(urls)}")
+            logger.info(f"- Records Correlated: {correlated_count}")
+            logger.info(f"- Errors: {error_count}")
+            logger.info(f"- Overall Correlation Rate: {correlation_rate:.1f}%")
+            logger.info("=" * 60)
+            
+            # Update last correlation time
+            self.last_correlation_time = time.time()
+            
+        except ImportError:
+            logger.error("Could not import correlation functions. Ensure api/main.py is accessible.")
+        except Exception as e:
+            logger.error(f"Failed to run correlation: {e}", exc_info=True)
+    
+    def check_periodic_correlation(self):
+        """Check if it's time to run periodic correlation."""
+        elapsed = time.time() - self.last_correlation_time
+        
+        # Run correlation every X minutes if there are enrichment events
+        if elapsed >= self.correlation_interval:
+            # Check if we have enrichment events
+            total_events = (
+                self.db['dom_snapshots'].count_documents({}) +
+                self.db['js_executions'].count_documents({}) +
+                self.db['storage_states'].count_documents({})
+            )
+            
+            if total_events > 0:
+                logger.info(f"Periodic correlation triggered ({self.correlation_interval}s interval)")
+                self._run_correlation()
 
 
 def main():
@@ -378,11 +483,20 @@ def main():
     observer.start()
     logger.info("File system observer started. Watching for changes...")
     
+    # Run correlation on startup
+    logger.info("Running initial correlation on startup...")
+    try:
+        event_handler._run_correlation()
+    except Exception as e:
+        logger.error(f"Error running startup correlation: {e}")
+    
     try:
         while True:
             time.sleep(1)
             # Check for pending changes to process
             event_handler.process_pending_changes()
+            # Check if periodic correlation should run
+            event_handler.check_periodic_correlation()
     except KeyboardInterrupt:
         logger.info("Shutdown signal received")
         observer.stop()
