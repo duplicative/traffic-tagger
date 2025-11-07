@@ -20,6 +20,32 @@ document.addEventListener('DOMContentLoaded', () => {
 // Setup event listeners
 function setupEventListeners() {
     document.getElementById('clear-filters').addEventListener('click', clearDatabase);
+
+    // Tab switching logic
+    const tabButtons = document.querySelectorAll('.tab-button');
+    const tabContents = document.querySelectorAll('.tab-content');
+
+    tabButtons.forEach(button => {
+        button.addEventListener('click', () => {
+            const tabName = button.dataset.tab;
+
+            // Deactivate all tabs
+            tabButtons.forEach(btn => btn.classList.remove('active'));
+            tabContents.forEach(content => content.classList.remove('active'));
+
+            // Activate the selected tab
+            button.classList.add('active');
+            document.getElementById(`${tabName}-tab`).classList.add('active');
+
+            // Load data for the timeline tab if it's selected
+            if (tabName === 'timeline') {
+                // Assuming timeline.js will expose a function to load its data
+                if (typeof loadTimelineData === 'function') {
+                    loadTimelineData();
+                }
+            }
+        });
+    });
 }
 
 // Generate a color palette for tags

@@ -1,0 +1,25 @@
+{
+    "events": [
+        {
+            "eventId": "event1",
+            "timestamp": "2025-11-07T10:00:01Z",
+            "eventType": "DOM_SNAPSHOT",
+            "url": "http://example.com/page1",
+            "data": { "html": "<html>...</html>" }
+        },
+        {
+            "eventId": "event2",
+            "timestamp": "2025-11-07T10:00:05Z",
+            "eventType": "JS_EXECUTION",
+            "url": "http://example.com/page1",
+            "data": { "script": "console.log('hello')" }
+        },
+        {
+            "eventId": "event3",
+            "timestamp": "2025-11-07T10:00:10Z",
+            "eventType": "STORAGE_STATE",
+            "url": "http://example.com/page2",
+            "data": { "localStorage": { "key": "value" } }
+        }
+    ]
+}

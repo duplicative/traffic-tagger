@@ -556,3 +556,71 @@ header p {
     padding: 0 !important;
 }
 
+/* Timeline View */
+#timeline-container {
+    padding: 20px;
+}
+
+.timeline-record {
+    border-left: 3px solid #667eea;
+    margin-bottom: 5px;
+}
+
+.http-record {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    padding: 10px;
+    background: #f0f2f5;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.http-record:hover {
+    background: #e4e6eb;
+}
+
+.http-record .record-method {
+    flex-shrink: 0;
+}
+
+.http-record .record-status {
+    flex-shrink: 0;
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-weight: bold;
+    font-size: 0.85em;
+    background: #e9ecef;
+    color: #495057;
+}
+
+.http-record .record-host {
+    font-weight: bold;
+    color: #333;
+}
+
+.http-record .record-path {
+    color: #555;
+    flex-grow: 1;
+}
+
+.http-record .record-time {
+    font-family: monospace;
+    color: #777;
+}
+
+.sidecar-events-container {
+    padding: 10px 0 10px 40px; /* Indentation */
+    background: #fafafa;
+}
+
+.sidecar-event {
+    padding: 8px 10px;
+    border-bottom: 1px solid #eee;
+    font-size: 0.9em;
+}
+
+.sidecar-event:last-child {
+    border-bottom: none;
+}
+

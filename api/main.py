@@ -406,6 +406,65 @@ async def clear_all_records():
         raise HTTPException(status_code=500, detail=f"Error clearing database: {str(e)}")
 
 
+@app.get("/api/timeline")
+async def get_timeline_data():
+    """
+    Get data for the timeline view, correlating HTTP records with sidecar events.
+    """
+    try:
+        # 1. Fetch HTTP proxy records
+        http_records_cursor = collection.find({"response_created_at": {"$exists": True}}).sort("response_created_at", 1)
+        http_records = list(http_records_cursor)
+
+        # 2. Fetch all sidecar events
+        sidecar_events = []
+        sidecar_collections = ["dom_snapshots", "js_executions", "storage_states"]
+        for coll_name in sidecar_collections:
+            events = db[coll_name].find({})
+            for event in events:
+                # Add a 'type' field to distinguish between event types
+                event['type'] = coll_name
+                sidecar_events.append(event)
+        
+        # Sort sidecar events by timestamp
+        sidecar_events.sort(key=lambda x: x.get("timestamp", 0))
+
+        # 3. Correlate sidecar events with HTTP records
+        correlated_data = []
+        for i, http_record in enumerate(http_records):
+            http_record["_id"] = str(http_record["_id"])
+            start_time = http_record.get("response_created_at", 0)
+            
+            # Determine the end time for the current HTTP record's time window
+            if i + 1 < len(http_records):
+                end_time = http_records[i + 1].get("response_created_at", float('inf'))
+            else:
+                end_time = float('inf')
+
+            # Find sidecar events that fall within the time window
+            associated_sidecar_events = []
+            for event in sidecar_events:
+                event_timestamp_str = event.get("timestamp")
+                if event_timestamp_str:
+                    # Convert ISO 8601 timestamp string to epoch seconds
+                    try:
+                        event_timestamp = datetime.fromisoformat(event_timestamp_str.replace("Z", "+00:00")).timestamp()
+                        if start_time <= event_timestamp < end_time:
+                            event["_id"] = str(event["_id"])
+                            associated_sidecar_events.append(event)
+                    except ValueError:
+                        # Handle cases where the timestamp format is unexpected
+                        continue
+
+            http_record["sidecar_events"] = associated_sidecar_events
+            correlated_data.append(http_record)
+
+        return {"timeline": correlated_data}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching timeline data: {str(e)}")
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

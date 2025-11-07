@@ -21,6 +21,7 @@
         <nav class="tabs">
             <button class="tab-button active" data-tab="tagged-records">Tagged Records</button>
             <button class="tab-button" data-tab="raw-data">Raw Data Browser</button>
+            <button class="tab-button" data-tab="timeline">Timeline</button>
         </nav>
         
         <!-- Tagged Records Tab Content -->
@@ -90,9 +91,17 @@
                 </div>
             </div>
         </div>
+
+        <!-- Timeline Tab Content -->
+        <div id="timeline-tab" class="tab-content">
+            <div id="timeline-container">
+                <p class="loading">Loading timeline...</p>
+            </div>
+        </div>
     </div>
     
     <script src="app.js"></script>
     <script src="raw-data-browser.js"></script>
+    <script src="timeline.js"></script>
 </body>
 </html>
