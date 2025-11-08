@@ -624,3 +624,38 @@ header p {
     border-bottom: none;
 }
 
+.sidecar-summary {
+    cursor: pointer;
+    padding: 5px;
+    background-color: #f8f9fa;
+    border-radius: 3px;
+}
+
+.sidecar-summary:hover {
+    background-color: #e9ecef;
+}
+
+.sidecar-details {
+    padding: 10px;
+    background-color: #fff;
+    border: 1px solid #dee2e6;
+    border-radius: 5px;
+    margin-top: 5px;
+}
+
+.sidecar-details pre {
+    margin: 0;
+    font-family: 'Courier New', monospace;
+    font-size: 0.85em;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    color: #212529;
+    line-height: 1.4;
+}
+
+.timeline-details {
+    padding: 20px;
+    background: #fff;
+    border-top: 2px solid #dee2e6;
+}
+

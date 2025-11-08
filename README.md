@@ -122,7 +122,9 @@ traffic_tagger/
 │   └── static/
 │       ├── index.html     # Main HTML page
 │       ├── styles.css     # CSS styles
-│       └── app.js         # JavaScript application
+│       ├── app.js         # Main application logic
+│       ├── raw-data-browser.js # Raw data browser logic
+│       └── timeline.js    # Timeline view logic
 ├── data/                   # Data directory (watched for changes)
 │   ├── rules.yaml         # Active rules file
 │   └── *.csv              # CSV data files

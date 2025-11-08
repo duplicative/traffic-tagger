@@ -44,3 +44,6 @@ Resolved frontend caching issue where UI continued displaying old tags and recor
 
 ## Sidecar Extension ImportScripts Error Fix | 2025-01-10
 Resolved critical Chrome Manifest V3 extension loading error caused by incompatibility between module-type service worker ("type": "module" in manifest.json) and legacy importScripts() call. Converted sidecar-extension to ES6 module syntax by adding export statements to message-logger.js and replacing importScripts() with ES6 import in background.js. Created comprehensive test suite (test_sidecar_extension_fix.py) that verifies API connectivity, enrichment endpoint functionality, and MongoDB storage for all three event types (DOM_SNAPSHOT, JS_EXECUTION, STORAGE_STATE). Fix enables extension to successfully load in Chrome, capture browser events, and forward enrichment data to traffic-tagger API.
+
+## Timeline View Feature | 2025-11-07
+Implemented a timeline view to correlate HTTP proxy records with sidecar events. Created a new API endpoint `/api/timeline` to fetch and correlate data from the `records`, `dom_snapshots`, `js_executions`, and `storage_states` collections. Added a "Timeline" tab to the frontend UI, with a nested, expandable/collapsible view to display the parent-child relationship between HTTP records and sidecar events.

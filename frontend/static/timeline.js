@@ -26,17 +26,43 @@ function renderTimeline(timelineData) {
 
     container.innerHTML = timelineData.map(httpRecord => {
         const sidecarEventsHtml = httpRecord.sidecar_events.map(event => {
-            return `<div class="sidecar-event"><strong>${event.type}:</strong> ${event.eventType} at ${new Date(event.timestamp).toLocaleTimeString()}</div>`;
+            const eventData = event.data ? JSON.stringify(event.data, null, 2) : '{}';
+            return `
+                <div class="sidecar-event">
+                    <div class="sidecar-summary" onclick="toggleSidecarEventDetails(this)">
+                        <strong>${event.type}</strong>: ${event.eventType}
+                        <span class="event-time">${new Date(event.timestamp).toLocaleTimeString()}</span>
+                    </div>
+                    <div class="sidecar-details" style="display: none;">
+                        <pre><code>${escapeHtml(eventData)}</code></pre>
+                    </div>
+                </div>
+            `;
         }).join('');
+
+        const request = httpRecord.decoded_request || '';
+        const response = httpRecord.decoded_response || '';
 
         return `
             <div class="timeline-record">
-                <div class="http-record" onclick="toggleSidecarEvents(this)">
+                <div class="http-record" onclick="toggleHttpRecordDetails(this)">
                     <span class="record-method method-${httpRecord.method}">${httpRecord.method}</span>
-                    <span class="record-status">${httpRecord.response_status_code}</span>
+                    <span class="record-status status-${getStatusClass(httpRecord.response_status_code)}">${httpRecord.response_status_code}</span>
                     <span class="record-host">${httpRecord.host}</span>
                     <span class="record-path">${httpRecord.path}</span>
                     <span class="record-time">${new Date(httpRecord.response_created_at * 1000).toLocaleTimeString()}</span>
+                </div>
+                <div class="timeline-details" style="display: none;">
+                    <div class="http-details">
+                        <div class="http-content">
+                            <h3>Request</h3>
+                            <pre>${escapeHtml(request)}</pre>
+                        </div>
+                        <div class="http-content">
+                            <h3>Response</h3>
+                            <pre>${escapeHtml(response)}</pre>
+                        </div>
+                    </div>
                 </div>
                 <div class="sidecar-events-container" style="display: none;">
                     ${sidecarEventsHtml}
@@ -46,11 +72,48 @@ function renderTimeline(timelineData) {
     }).join('');
 }
 
-function toggleSidecarEvents(element) {
-    const sidecarContainer = element.nextElementSibling;
-    if (sidecarContainer.style.display === 'none') {
-        sidecarContainer.style.display = 'block';
-    } else {
-        sidecarContainer.style.display = 'none';
+function toggleHttpRecordDetails(element) {
+    const detailsContainer = element.nextElementSibling;
+    if (detailsContainer) {
+        if (detailsContainer.style.display === 'none') {
+            detailsContainer.style.display = 'block';
+        } else {
+            detailsContainer.style.display = 'none';
+        }
     }
+    const sidecarContainer = element.nextElementSibling.nextElementSibling;
+    if (sidecarContainer) {
+        if (sidecarContainer.style.display === 'none') {
+            sidecarContainer.style.display = 'block';
+        } else {
+            sidecarContainer.style.display = 'none';
+        }
+    }
+}
+
+function toggleSidecarEventDetails(element) {
+    const detailsContainer = element.nextElementSibling;
+    if (detailsContainer) {
+        if (detailsContainer.style.display === 'none') {
+            detailsContainer.style.display = 'block';
+        } else {
+            detailsContainer.style.display = 'none';
+        }
+    }
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// This function is defined in app.js, but we need it here as well.
+// This is not ideal, but it's the quickest way to get the status class.
+function getStatusClass(statusCode) {
+    if (statusCode >= 200 && statusCode < 300) return '2xx';
+    if (statusCode >= 300 && statusCode < 400) return '3xx';
+    if (statusCode >= 400 && statusCode < 500) return '4xx';
+    if (statusCode >= 500) return '5xx';
+    return '2xx';
 }

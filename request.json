@@ -1,0 +1,26 @@
+{
+    "contents": [
+      {
+        "role": "user",
+        "parts": [
+          {
+            "text": "write an llm prompt that will analyze documentation for features or business logic that has security implications, and describe how to test for those things."
+          },
+        ]
+      },
+    ],
+    "generationConfig": {
+      "thinkingConfig": {
+        "thinkingBudget": -1,
+      },
+      "imageConfig": {
+        "image_size": "1K"
+      },
+    },
+    "tools": [
+      {
+        "googleSearch": {
+        }
+      },
+    ],
+}
