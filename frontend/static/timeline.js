@@ -43,6 +43,12 @@ function renderTimeline(timelineData) {
         const request = httpRecord.decoded_request || '';
         const response = httpRecord.decoded_response || '';
 
+        const reflections = Array.isArray(httpRecord.reflections) ? httpRecord.reflections : [];
+        const reflectionsText = reflections.length > 0 ? `Reflected Values: ${reflections.join(', ')}` : '';
+        const reflectionBadge = reflections.length > 0
+            ? `<span class="reflection-badge" title="${escapeHtml(reflectionsText)}">[Input Reflected]</span>`
+            : '';
+
         return `
             <div class="timeline-record">
                 <div class="http-record" onclick="toggleHttpRecordDetails(this)">
@@ -50,6 +56,7 @@ function renderTimeline(timelineData) {
                     <span class="record-status status-${getStatusClass(httpRecord.response_status_code)}">${httpRecord.response_status_code}</span>
                     <span class="record-host">${httpRecord.host}</span>
                     <span class="record-path">${httpRecord.path}</span>
+                    ${reflectionBadge}
                     <span class="record-time">${new Date(httpRecord.response_created_at * 1000).toLocaleTimeString()}</span>
                 </div>
                 <div class="timeline-details" style="display: none;">

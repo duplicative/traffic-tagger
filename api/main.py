@@ -7,6 +7,7 @@ from pymongo import MongoClient
 from bson import ObjectId
 from pydantic import BaseModel, Field
 from datetime import datetime
+from shared.reflection_analyzer import analyze_reflections
 
 app = FastAPI(title="HTTP Traffic Tagger API")
 
@@ -457,6 +458,13 @@ async def get_timeline_data():
                         continue
 
             http_record["sidecar_events"] = associated_sidecar_events
+
+            # 4. Analyze reflections of user inputs in sidecar events
+            try:
+                http_record["reflections"] = analyze_reflections(http_record, associated_sidecar_events)
+            except Exception:
+                http_record["reflections"] = []
+
             correlated_data.append(http_record)
 
         return {"timeline": correlated_data}
